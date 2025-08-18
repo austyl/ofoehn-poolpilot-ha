@@ -1,0 +1,70 @@
+# Lovelace view – Full (paste in Raw configuration editor)
+views:
+  - title: Piscine – PAC O'Foehn
+    path: piscine-ofoehn
+    icon: mdi:pool
+    badges: []
+    cards:
+      - type: thermostat
+        entity: climate.ofoehn_pac_piscine  # ← change if needed
+        name: PAC O'Foehn
+
+      - type: horizontal-stack
+        cards:
+          - type: button
+            entity: switch.pac_alimentation  # ← change if needed
+            name: Alimentation PAC
+            icon: mdi:power
+          - type: button
+            entity: switch.eclairage_piscine  # ← change if needed
+            name: Éclairage piscine
+            icon: mdi:lightbulb
+
+      - type: grid
+        columns: 3
+        square: false
+        cards:
+          - type: gauge
+            name: Eau In
+            entity: sensor.ofoehn_eau_in
+            min: 0
+            max: 40
+            unit: "°C"
+          - type: gauge
+            name: Eau Out
+            entity: sensor.ofoehn_eau_out
+            min: 0
+            max: 40
+            unit: "°C"
+          - type: gauge
+            name: Air
+            entity: sensor.ofoehn_air
+            min: -10
+            max: 45
+            unit: "°C"
+
+      - type: history-graph
+        title: Historique températures (24 h)
+        hours_to_show: 24
+        entities:
+          - entity: sensor.ofoehn_eau_in
+            name: Eau In
+          - entity: sensor.ofoehn_eau_out
+            name: Eau Out
+          - entity: sensor.ofoehn_air
+            name: Air
+          # Uncomment to show setpoint if your HA supports it via climate attributes:
+          # - entity: climate.ofoehn_pac_piscine
+          #   attribute: temperature
+          #   name: Consigne
+
+      - type: entities
+        title: État & réglages
+        entities:
+          - entity: climate.ofoehn_pac_piscine
+            name: Mode & Consigne
+          - sensor.ofoehn_eau_in
+          - sensor.ofoehn_eau_out
+          - sensor.ofoehn_air
+          - switch.pac_alimentation
+          - switch.eclairage_piscine

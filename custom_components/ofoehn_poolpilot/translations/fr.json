@@ -1,0 +1,32 @@
+{
+  "title": "O'Foehn PoolPilot",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connexion à la PAC O'Foehn",
+        "description": "Entrez l'adresse IP locale et le port si nécessaire.",
+        "data": {
+          "host": "Adresse IP",
+          "port": "Port"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Cet appareil est déjà configuré."
+    },
+    "options": {
+      "step": {
+        "init": {
+          "title": "Options avancées",
+          "data": {
+            "water_in_idx": "Index DONNEE# Eau In",
+            "water_out_idx": "Index DONNEE# Eau Out",
+            "air_idx": "Index DONNEE# Air",
+            "light_idx": "Index DONNEE# Lumière",
+            "power_idx": "Index DONNEE# Alimentation/Marche"
+          }
+        }
+      }
+    }
+  }
+}

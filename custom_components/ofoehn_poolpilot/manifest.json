@@ -1,0 +1,17 @@
+{
+  "domain": "ofoehn_poolpilot",
+  "name": "O'Foehn PoolPilot",
+  "version": "0.1.0",
+  "documentation": "https://github.com/jfbrassens/ofoehn-poolpilot-ha",
+  "issue_tracker": "https://github.com/jfbrassens/ofoehn-poolpilot-ha/issues",
+  "requirements": [],
+  "codeowners": [
+    "@jfbrassens"
+  ],
+  "iot_class": "local_polling",
+  "integration_type": "device",
+  "config_flow": true,
+  "loggers": [
+    "custom_components.ofoehn_poolpilot"
+  ]
+}

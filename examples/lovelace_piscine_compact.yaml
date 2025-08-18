@@ -1,0 +1,42 @@
+# Lovelace view – Compact (paste in Raw configuration editor)
+views:
+  - title: Piscine – Compact
+    path: piscine-compact
+    icon: mdi:chart-bell-curve
+    badges: []
+    cards:
+      - type: thermostat
+        entity: climate.ofoehn_pac_piscine  # ← change if needed
+        name: PAC O'Foehn
+      - type: grid
+        columns: 3
+        square: false
+        cards:
+          - type: gauge
+            name: Eau In
+            entity: sensor.ofoehn_eau_in
+            min: 0
+            max: 40
+            unit: "°C"
+          - type: gauge
+            name: Eau Out
+            entity: sensor.ofoehn_eau_out
+            min: 0
+            max: 40
+            unit: "°C"
+          - type: gauge
+            name: Air
+            entity: sensor.ofoehn_air
+            min: -10
+            max: 45
+            unit: "°C"
+      - type: horizontal-stack
+        cards:
+          - type: button
+            entity: switch.pac_alimentation  # ← change if needed
+            name: Alimentation PAC
+            icon: mdi:power
+          - type: button
+            entity: switch.eclairage_piscine  # ← change if needed
+            name: Éclairage piscine
+            icon: mdi:lightbulb

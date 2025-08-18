@@ -1,0 +1,42 @@
+from __future__ import annotations
+
+import voluptuous as vol
+from homeassistant import config_entries
+from homeassistant.core import callback
+from .const import DOMAIN, DEFAULT_PORT, DEFAULT_INDEX
+
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    VERSION = 1
+
+    async def async_step_user(self, user_input=None):
+        errors = {}
+        if user_input is not None:
+            return self.async_create_entry(title=f"O'Foehn ({user_input['host']})", data=user_input)
+        data_schema = vol.Schema({
+            vol.Required("host"): str,
+            vol.Optional("port", default=DEFAULT_PORT): int,
+        })
+        return self.async_show_form(step_id="user", data_schema=data_schema, errors=errors)
+
+    @callback
+    def async_get_options_flow(self, config_entry):
+        return OptionsFlowHandler(config_entry)
+
+
+class OptionsFlowHandler(config_entries.OptionsFlow):
+    def __init__(self, config_entry):
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input=None):
+        if user_input is not None:
+            return self.async_create_entry(title="Options", data=user_input)
+
+        oi = self.config_entry.options or {}
+        schema = vol.Schema({
+            vol.Optional("water_in_idx", default=oi.get("water_in_idx", DEFAULT_INDEX["water_in_idx"])): int,
+            vol.Optional("water_out_idx", default=oi.get("water_out_idx", DEFAULT_INDEX["water_out_idx"])): int,
+            vol.Optional("air_idx", default=oi.get("air_idx", DEFAULT_INDEX["air_idx"])): int,
+            vol.Optional("light_idx", default=oi.get("light_idx", DEFAULT_INDEX["light_idx"])): int,
+            vol.Optional("power_idx", default=oi.get("power_idx", DEFAULT_INDEX["power_idx"])): int,
+        })
+        return self.async_show_form(step_id="init", data_schema=schema)

@@ -1,0 +1,32 @@
+{
+  "title": "O'Foehn PoolPilot",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to O'Foehn heat pump",
+        "description": "Enter local IP address and port if needed.",
+        "data": {
+          "host": "IP address",
+          "port": "Port"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "This device is already configured."
+    },
+    "options": {
+      "step": {
+        "init": {
+          "title": "Advanced options",
+          "data": {
+            "water_in_idx": "DONNEE# index: Water In",
+            "water_out_idx": "DONNEE# index: Water Out",
+            "air_idx": "DONNEE# index: Air",
+            "light_idx": "DONNEE# index: Light",
+            "power_idx": "DONNEE# index: Power state"
+          }
+        }
+      }
+    }
+  }
+}
