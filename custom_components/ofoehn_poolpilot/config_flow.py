@@ -3,7 +3,9 @@ from __future__ import annotations
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
-from .const import DOMAIN, DEFAULT_PORT, DEFAULT_INDEX
+from .const import DOMAIN, DEFAULT_PORT, AUTH_NONE, AUTH_BASIC, AUTH_QUERY, AUTH_COOKIE, DEFAULT_INDEX
+
+AUTH_OPTIONS = [AUTH_NONE, AUTH_BASIC, AUTH_QUERY, AUTH_COOKIE]
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
@@ -12,9 +14,17 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
         if user_input is not None:
             return self.async_create_entry(title=f"O'Foehn ({user_input['host']})", data=user_input)
+
         data_schema = vol.Schema({
             vol.Required("host"): str,
             vol.Optional("port", default=DEFAULT_PORT): int,
+            vol.Optional("auth_mode", default=AUTH_NONE): vol.In(AUTH_OPTIONS),
+            vol.Optional("username"): str,
+            vol.Optional("password"): str,
+            vol.Optional("login_path", default="/login.cgi"): str,
+            vol.Optional("login_method", default="POST"): vol.In(["GET", "POST"]),
+            vol.Optional("user_field", default="user"): str,
+            vol.Optional("pass_field", default="pass"): str,
         })
         return self.async_show_form(step_id="user", data_schema=data_schema, errors=errors)
 

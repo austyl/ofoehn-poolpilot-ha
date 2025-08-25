@@ -1,4 +1,3 @@
-# Lovelace view – Full (paste in Raw configuration editor)
 views:
   - title: Piscine – PAC O'Foehn
     path: piscine-ofoehn
@@ -6,20 +5,18 @@ views:
     badges: []
     cards:
       - type: thermostat
-        entity: climate.ofoehn_pac_piscine  # ← change if needed
+        entity: climate.ofoehn_pac_piscine
         name: PAC O'Foehn
-
       - type: horizontal-stack
         cards:
           - type: button
-            entity: switch.pac_alimentation  # ← change if needed
+            entity: switch.pac_alimentation
             name: Alimentation PAC
             icon: mdi:power
           - type: button
-            entity: switch.eclairage_piscine  # ← change if needed
+            entity: switch.eclairage_piscine
             name: Éclairage piscine
             icon: mdi:lightbulb
-
       - type: grid
         columns: 3
         square: false
@@ -42,7 +39,6 @@ views:
             min: -10
             max: 45
             unit: "°C"
-
       - type: history-graph
         title: Historique températures (24 h)
         hours_to_show: 24
@@ -53,11 +49,6 @@ views:
             name: Eau Out
           - entity: sensor.ofoehn_air
             name: Air
-          # Uncomment to show setpoint if your HA supports it via climate attributes:
-          # - entity: climate.ofoehn_pac_piscine
-          #   attribute: temperature
-          #   name: Consigne
-
       - type: entities
         title: État & réglages
         entities:

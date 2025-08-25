@@ -3,6 +3,12 @@ DEFAULT_PORT = 80
 PLATFORMS = ["climate", "sensor", "switch"]
 SCAN_INTERVAL = 30  # seconds
 
+# Auth modes
+AUTH_NONE = "none"
+AUTH_BASIC = "basic"
+AUTH_QUERY = "query"
+AUTH_COOKIE = "cookie"
+
 ENDPOINTS = {
     "accueil": "/accueil.cgi",
     "super": "/super.cgi",
@@ -17,6 +23,6 @@ DEFAULT_INDEX = {
     "water_in_idx": 5,
     "water_out_idx": 6,
     "air_idx": 7,
-    "light_idx": 16,  # from accueil.cgi usually
-    "power_idx": 24   # indicator for power state (super/accueil dependent)
+    "light_idx": 16,  # accueil.cgi souvent
+    "power_idx": 24   # état alim (selon firmware)
 }

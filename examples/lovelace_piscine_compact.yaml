@@ -1,4 +1,3 @@
-# Lovelace view – Compact (paste in Raw configuration editor)
 views:
   - title: Piscine – Compact
     path: piscine-compact
@@ -6,7 +5,7 @@ views:
     badges: []
     cards:
       - type: thermostat
-        entity: climate.ofoehn_pac_piscine  # ← change if needed
+        entity: climate.ofoehn_pac_piscine
         name: PAC O'Foehn
       - type: grid
         columns: 3
@@ -33,10 +32,10 @@ views:
       - type: horizontal-stack
         cards:
           - type: button
-            entity: switch.pac_alimentation  # ← change if needed
+            entity: switch.pac_alimentation
             name: Alimentation PAC
             icon: mdi:power
           - type: button
-            entity: switch.eclairage_piscine  # ← change if needed
+            entity: switch.eclairage_piscine
             name: Éclairage piscine
             icon: mdi:lightbulb

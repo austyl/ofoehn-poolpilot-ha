@@ -1,57 +1,119 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
-from aiohttp import ClientSession
+from aiohttp import ClientSession, BasicAuth, ClientResponseError
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from .const import ENDPOINTS, DEFAULT_INDEX
+from .const import ENDPOINTS, DEFAULT_INDEX, AUTH_NONE, AUTH_BASIC, AUTH_QUERY, AUTH_COOKIE
 
 class OFoehnApi:
-    def __init__(self, host: str, port: int, session: ClientSession) -> None:
+    def __init__(self, host: str, port: int, session: ClientSession, auth_mode: str = AUTH_NONE,
+                 username: Optional[str] = None, password: Optional[str] = None,
+                 login_path: str = "/login.cgi", login_method: str = "POST",
+                 user_field: str = "user", pass_field: str = "pass") -> None:
         self._base = f"http://{host}:{port}"
         self._session = session
+        self._auth_mode = auth_mode
+        self._username = username
+        self._password = password
+        self._login_path = login_path
+        self._login_method = login_method.upper()
+        self._user_field = user_field
+        self._pass_field = pass_field
+        self._basic_auth = BasicAuth(username, password) if (auth_mode == AUTH_BASIC and username) else None
 
-    async def _get(self, path: str) -> str:
-        async with self._session.get(self._base + path, timeout=10) as resp:
-            resp.raise_for_status()
-            return await resp.text()
+    def _url(self, path: str, query: Dict[str, Any] | None = None) -> str:
+        url = self._base + path
+        if self._auth_mode == AUTH_QUERY and self._username and self._password:
+            q = query.copy() if query else {}
+            q[self._user_field] = self._username
+            q[self._pass_field] = self._password
+            from urllib.parse import urlencode
+            sep = "&" if "?" in url else "?"
+            url = url + sep + urlencode(q)
+        elif query:
+            from urllib.parse import urlencode
+            sep = "&" if "?" in url else "?"
+            url = url + sep + urlencode(query)
+        return url
 
-    async def _post(self, path: str, data: Any | None = None) -> str:
-        async with self._session.post(self._base + path, data=data or {}, timeout=10) as resp:
-            resp.raise_for_status()
-            return await resp.text()
+    async def _maybe_login(self) -> None:
+        if self._auth_mode != AUTH_COOKIE:
+            return
+        data = {self._user_field: self._username or "", self._pass_field: self._password or ""}
+        url = self._base + self._login_path
+        if self._login_method == "GET":
+            async with self._session.get(url, params=data, timeout=10) as resp:
+                resp.raise_for_status()
+        else:
+            async with self._session.post(url, data=data, timeout=10) as resp:
+                resp.raise_for_status()
+
+    async def _fetch(self, method: str, path: str, *, data: Any | None = None, query: Dict[str, Any] | None = None) -> str:
+        url = self._url(path, query=query)
+        try:
+            if method == "GET":
+                async with self._session.get(url, timeout=10, auth=self._basic_auth) as resp:
+                    resp.raise_for_status()
+                    return await resp.text()
+            else:
+                if self._auth_mode == AUTH_QUERY and self._username and self._password:
+                    if isinstance(data, dict) or data is None:
+                        data = data.copy() if data else {}
+                        data[self._user_field] = self._username
+                        data[self._pass_field] = self._password
+                async with self._session.post(url, data=data or {}, timeout=10, auth=self._basic_auth) as resp:
+                    resp.raise_for_status()
+                    return await resp.text()
+        except ClientResponseError as e:
+            if e.status in (401, 403) and self._auth_mode == AUTH_COOKIE:
+                await self._maybe_login()
+                if method == "GET":
+                    async with self._session.get(url, timeout=10) as resp2:
+                        resp2.raise_for_status()
+                        return await resp2.text()
+                else:
+                    async with self._session.post(url, data=data or {}, timeout=10) as resp2:
+                        resp2.raise_for_status()
+                        return await resp2.text()
+            raise
 
     # Reads
     async def read_super(self) -> str:
-        return await self._get(ENDPOINTS["super"])
+        if self._auth_mode == AUTH_COOKIE:
+            await self._maybe_login()
+        return await self._fetch("GET", ENDPOINTS["super"])
 
     async def read_accueil(self) -> str:
-        return await self._get(ENDPOINTS["accueil"])
+        if self._auth_mode == AUTH_COOKIE:
+            await self._maybe_login()
+        return await self._fetch("GET", ENDPOINTS["accueil"])
 
     async def read_reg(self) -> str:
-        return await self._get(ENDPOINTS["reg_get"])
+        if self._auth_mode == AUTH_COOKIE:
+            await self._maybe_login()
+        return await self._fetch("GET", ENDPOINTS["reg_get"])
 
     # Writes
     async def set_mode(self, mode: str) -> None:
-        await self._post(ENDPOINTS["reg_set"], {"mode": mode})
+        await self._fetch("POST", ENDPOINTS["reg_set"], data={"mode": mode})
 
     async def set_setpoint(self, temp: float) -> None:
         t = f"{temp:.1f}"
         data = {"consigneFroid": t, "consigneChaud": t, "consigneAuto": t}
-        await self._post(ENDPOINTS["reg_set"], data)
+        await self._fetch("POST", ENDPOINTS["reg_set"], data=data)
 
     async def toggle_power(self) -> None:
-        await self._get(ENDPOINTS["toggle"])
+        await self._fetch("GET", ENDPOINTS["toggle"])
 
     async def set_light(self, on: bool) -> None:
         payload = "1" if on else "0"
-        await self._post(ENDPOINTS["light"], payload)
+        await self._fetch("POST", ENDPOINTS["light"], data=payload)
 
 
 def parse_donnees(raw: str) -> Dict[int, float]:
-    # Extract DONNEE<idx>=<number> from raw text
     out: Dict[int, float] = {}
     for m in re.finditer(r"DONNEE(\d+)=([0-9.]+)", raw):
         try:
@@ -62,8 +124,6 @@ def parse_donnees(raw: str) -> Dict[int, float]:
 
 
 def parse_reg(raw: str) -> Dict[str, Any]:
-    # Heuristic: first line, first comma-separated value is setpoint
-    # Mode appears as CHAUD/FROID/AUTO in line
     line = raw.split("\n", 1)[0]
     setpoint = None
     try:

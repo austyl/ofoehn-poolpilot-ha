@@ -1,8 +1,10 @@
 # Changelog
 
-## v0.1.0 — 2025-08-18
-- Première version publique HACS-ready.
-- Entité `climate` (OFF/AUTO/CHAUD/FROID + consigne).
-- Capteurs eau IN/OUT + air, interrupteurs alimentation + éclairage.
-- Options indices DONNEE# pour compatibilité firmware.
-- Exemples Lovelace inclus.
+## v0.2.1 — Auth & Examples
+- Authentification: NONE/BASIC/QUERY/COOKIE
+- Options indices DONNEE#
+- Exemples Lovelace ajoutés (full/compact)
+- CI: hassfest + HACS action
+
+## v0.2.0
+- Première version publique avec auth

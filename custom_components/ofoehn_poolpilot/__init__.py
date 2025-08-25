@@ -7,7 +7,6 @@ from aiohttp import ClientSession
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import DOMAIN, PLATFORMS, SCAN_INTERVAL
 from .coordinator import OFoehnApi, OFoehnCoordinator
@@ -21,7 +20,19 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     session: ClientSession = hass.helpers.aiohttp_client.async_get_clientsession()
-    api = OFoehnApi(entry.data["host"], entry.data.get("port", 80), session)
+
+    api = OFoehnApi(
+        host=entry.data["host"],
+        port=entry.data.get("port", 80),
+        session=session,
+        auth_mode=entry.data.get("auth_mode", "none"),
+        username=entry.data.get("username"),
+        password=entry.data.get("password"),
+        login_path=entry.data.get("login_path", "/login.cgi"),
+        login_method=entry.data.get("login_method", "POST"),
+        user_field=entry.data.get("user_field", "user"),
+        pass_field=entry.data.get("pass_field", "pass"),
+    )
 
     coordinator = OFoehnCoordinator(
         hass=hass,
@@ -54,5 +65,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    # Reload to apply options (indices DONNEE#)
     await hass.config_entries.async_reload(entry.entry_id)

@@ -4,10 +4,17 @@
     "step": {
       "user": {
         "title": "Connect to O'Foehn heat pump",
-        "description": "Enter local IP address and port if needed.",
+        "description": "Enter IP address and choose authentication mode if required.",
         "data": {
           "host": "IP address",
-          "port": "Port"
+          "port": "Port",
+          "auth_mode": "Authentication mode",
+          "username": "Username",
+          "password": "Password",
+          "login_path": "Login path (COOKIE)",
+          "login_method": "Login method (COOKIE)",
+          "user_field": "Username field name",
+          "pass_field": "Password field name"
         }
       }
     },

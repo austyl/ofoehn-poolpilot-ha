@@ -4,10 +4,17 @@
     "step": {
       "user": {
         "title": "Connexion à la PAC O'Foehn",
-        "description": "Entrez l'adresse IP locale et le port si nécessaire.",
+        "description": "Entrez l'adresse IP et choisissez le mode d'authentification si nécessaire.",
         "data": {
           "host": "Adresse IP",
-          "port": "Port"
+          "port": "Port",
+          "auth_mode": "Mode d'authentification",
+          "username": "Nom d'utilisateur",
+          "password": "Mot de passe",
+          "login_path": "Chemin de login (COOKIE)",
+          "login_method": "Méthode de login (COOKIE)",
+          "user_field": "Nom du champ utilisateur",
+          "pass_field": "Nom du champ mot de passe"
         }
       }
     },

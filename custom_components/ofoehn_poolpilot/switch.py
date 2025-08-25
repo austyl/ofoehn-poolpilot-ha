@@ -67,7 +67,6 @@ class PoolLightSwitch(CoordinatorEntity, SwitchEntity):
     @property
     def is_on(self):
         idx = self.coordinator.data["indices"]["light_idx"]
-        # Light state is read from accueil or super depending on firmware; here we use accueil
         return self.coordinator.data["accueil"].get(idx, 0) == 1
 
     async def async_turn_on(self, **kwargs):
