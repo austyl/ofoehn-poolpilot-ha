@@ -6,6 +6,7 @@ from datetime import timedelta
 from aiohttp import ClientSession
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, PLATFORMS, SCAN_INTERVAL
@@ -19,7 +20,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    session: ClientSession = hass.helpers.aiohttp_client.async_get_clientsession()
+    session: ClientSession = async_get_clientsession(hass)
 
     api = OFoehnApi(
         host=entry.data["host"],
