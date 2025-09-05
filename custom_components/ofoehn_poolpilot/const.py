@@ -1,6 +1,6 @@
 DOMAIN = "ofoehn_poolpilot"
 DEFAULT_PORT = 80
-PLATFORMS = ["climate", "sensor", "switch"]
+PLATFORMS = ["climate", "sensor", "switch", "binary_sensor"]
 SCAN_INTERVAL = 30  # seconds
 
 # Auth modes

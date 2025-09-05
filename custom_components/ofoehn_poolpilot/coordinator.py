@@ -112,6 +112,14 @@ class OFoehnApi:
         payload = "1" if on else "0"
         await self._fetch("POST", ENDPOINTS["light"], data=payload)
 
+    async def check_connection(self) -> bool:
+        """Perform a lightweight request to verify connectivity."""
+        try:
+            await self.read_super()
+            return True
+        except Exception:
+            return False
+
 
 def parse_donnees(raw: str) -> Dict[int, float]:
     out: Dict[int, float] = {}
