@@ -52,6 +52,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "port": entry.data.get("port", 80),
     }
 
+    async def _async_check_connection_service(call):
+        results = {}
+        for eid, info in hass.data.get(DOMAIN, {}).items():
+            sensor = info.get("connectivity_sensor")
+            if sensor is not None:
+                res = await sensor.async_check_connection()
+            else:
+                res = await info["api"].check_connection()
+            results[info["host"]] = res
+            _LOGGER.info("Connectivity check for %s: %s", info["host"], res)
+        return results
+
+    if not hass.services.has_service(DOMAIN, "check_connection"):
+        hass.services.async_register(
+            DOMAIN, "check_connection", _async_check_connection_service, supports_response=True
+        )
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     entry.async_on_unload(entry.add_update_listener(async_update_listener))
@@ -62,6 +79,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
+        if not hass.data[DOMAIN] and hass.services.has_service(DOMAIN, "check_connection"):
+            hass.services.async_remove(DOMAIN, "check_connection")
     return unload_ok
 
 
