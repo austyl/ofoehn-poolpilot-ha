@@ -121,6 +121,18 @@ class OFoehnApi:
             return False
 
 
+def parse_accueil_html(raw: str) -> Dict[str, float]:
+    match = re.search(r"Chaud\s+([\d.,]+)°C.*?\(([\d.,]+)°C\)", raw)
+    if not match:
+        return {}
+    try:
+        water_in = float(match.group(1).replace(',', '.'))
+        setpoint = float(match.group(2).replace(',', '.'))
+    except Exception:
+        return {}
+    return {"water_in": water_in, "setpoint": setpoint}
+
+
 def parse_donnees(raw: str) -> Dict[int, float]:
     out: Dict[int, float] = {}
     for m in re.finditer(r"DONNEE(\d+)=([0-9.]+)", raw):
@@ -156,6 +168,7 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
         sup = await self.api.read_super()
         acc = await self.api.read_accueil()
         reg = await self.api.read_reg()
+        parsed_accueil = parse_accueil_html(acc)
         return {
             "super_raw": sup,
             "accueil_raw": acc,
@@ -163,6 +176,8 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
             "super": parse_donnees(sup),
             "accueil": parse_donnees(acc),
             "reg": parse_reg(reg),
+            "water_in": parsed_accueil.get("water_in"),
+            "setpoint": parsed_accueil.get("setpoint"),
             "indices": {
                 "water_in_idx": self.options.get("water_in_idx", DEFAULT_INDEX["water_in_idx"]),
                 "water_out_idx": self.options.get("water_out_idx", DEFAULT_INDEX["water_out_idx"]),
