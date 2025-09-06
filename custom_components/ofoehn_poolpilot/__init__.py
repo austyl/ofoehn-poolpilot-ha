@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 
-from .const import DOMAIN, PLATFORMS, SCAN_INTERVAL
+from .const import DOMAIN, PLATFORMS, SCAN_INTERVAL, DEFAULT_TIMEOUT
 from .coordinator import OFoehnApi, OFoehnCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,6 +33,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         login_method=entry.data.get("login_method", "POST"),
         user_field=entry.data.get("user_field", "user"),
         pass_field=entry.data.get("pass_field", "pass"),
+        timeout=entry.data.get("timeout", DEFAULT_TIMEOUT),
     )
 
     coordinator = OFoehnCoordinator(
