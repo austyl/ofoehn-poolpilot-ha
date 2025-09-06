@@ -3,7 +3,16 @@ from __future__ import annotations
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
-from .const import DOMAIN, DEFAULT_PORT, AUTH_NONE, AUTH_BASIC, AUTH_QUERY, AUTH_COOKIE, DEFAULT_INDEX
+from .const import (
+    DOMAIN,
+    DEFAULT_PORT,
+    DEFAULT_TIMEOUT,
+    AUTH_NONE,
+    AUTH_BASIC,
+    AUTH_QUERY,
+    AUTH_COOKIE,
+    DEFAULT_INDEX,
+)
 
 AUTH_OPTIONS = [AUTH_NONE, AUTH_BASIC, AUTH_QUERY, AUTH_COOKIE]
 
@@ -25,6 +34,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Optional("login_method", default="POST"): vol.In(["GET", "POST"]),
             vol.Optional("user_field", default="user"): str,
             vol.Optional("pass_field", default="pass"): str,
+            vol.Optional("timeout", default=DEFAULT_TIMEOUT): int,
         })
         return self.async_show_form(step_id="user", data_schema=data_schema, errors=errors)
 
