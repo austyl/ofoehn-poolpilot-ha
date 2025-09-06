@@ -37,3 +37,20 @@ Voir `examples/` (full et compact) : jauges Eau In/Out/Air, carte Thermostat, hi
 
 ## 🛡️ Sécurité
 HTTP en clair : isolez la PAC (VLAN/IoT). Évitez le mode `QUERY` si possible (identifiants dans l'URL).
+
+## 🐞 Debug / Regex
+Activer les logs détaillés dans `configuration.yaml` :
+
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.ofoehn_poolpilot: debug
+```
+
+Une fois activée, la réponse complète est disponible dans l'attribut `raw` et également enregistrée dans les logs.
+
+Exemples de regex :
+
+- Température d'eau : `r"DONNEE5=([0-9.]+)"` (indice `5` par défaut pour `Eau In`, à adapter selon votre configuration).
+- Consigne : `r"^([0-9.]+),"` (première valeur renvoyée par `getReg.cgi`).
