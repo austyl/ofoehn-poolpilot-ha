@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import re
 from typing import Any, Dict, Optional
 
@@ -7,6 +9,8 @@ from aiohttp import ClientSession, BasicAuth, ClientResponseError
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from .const import ENDPOINTS, DEFAULT_INDEX, AUTH_NONE, AUTH_BASIC, AUTH_QUERY, AUTH_COOKIE
+
+_LOGGER = logging.getLogger(__name__)
 
 class OFoehnApi:
     def __init__(self, host: str, port: int, session: ClientSession, auth_mode: str = AUTH_NONE,
@@ -53,12 +57,14 @@ class OFoehnApi:
 
     async def _fetch(self, method: str, path: str, *, data: Any | None = None, query: Dict[str, Any] | None = None) -> str:
         url = self._url(path, query=query)
-        try:
-            if method == "GET":
-                async with self._session.get(url, timeout=10, auth=self._basic_auth) as resp:
-                    resp.raise_for_status()
-                    return await resp.text()
-            else:
+        last_exc: Exception | None = None
+        delay = 1
+        for attempt in range(1, 4):
+            try:
+                if method == "GET":
+                    async with self._session.get(url, timeout=10, auth=self._basic_auth) as resp:
+                        resp.raise_for_status()
+                        return await resp.text()
                 if self._auth_mode == AUTH_QUERY and self._username and self._password:
                     if isinstance(data, dict) or data is None:
                         data = data.copy() if data else {}
@@ -67,18 +73,24 @@ class OFoehnApi:
                 async with self._session.post(url, data=data or {}, timeout=10, auth=self._basic_auth) as resp:
                     resp.raise_for_status()
                     return await resp.text()
-        except ClientResponseError as e:
-            if e.status in (401, 403) and self._auth_mode == AUTH_COOKIE:
-                await self._maybe_login()
-                if method == "GET":
-                    async with self._session.get(url, timeout=10) as resp2:
-                        resp2.raise_for_status()
-                        return await resp2.text()
-                else:
-                    async with self._session.post(url, data=data or {}, timeout=10) as resp2:
-                        resp2.raise_for_status()
-                        return await resp2.text()
-            raise
+            except ClientResponseError as e:
+                if e.status in (401, 403) and self._auth_mode == AUTH_COOKIE:
+                    try:
+                        await self._maybe_login()
+                    except Exception as login_exc:
+                        last_exc = login_exc
+                        break
+                    continue
+                last_exc = e
+            except Exception as e:  # pylint: disable=broad-except
+                last_exc = e
+            if attempt < 3:
+                await asyncio.sleep(delay)
+                delay *= 2
+        _LOGGER.error("Failed to fetch %s after %d attempts: %s", url, 3, last_exc)
+        if last_exc:
+            raise last_exc
+        raise RuntimeError("Unknown fetch failure")
 
     # Reads
     async def read_super(self) -> str:
