@@ -70,4 +70,8 @@ class RawSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self):
-        return self.coordinator.data.get(self._key)
+        value = self.coordinator.data.get(self._key)
+        self._attr_extra_state_attributes = {"raw": value}
+        if value is None:
+            return None
+        return value[:255]
