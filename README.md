@@ -12,6 +12,7 @@ Version **v0.2.1** — Ajout de l'**authentification**: NONE / BASIC / QUERY / C
 ## ✨ Fonctionnalités
 - Entité **Climate** (OFF/AUTO/CHAUD/FROID, consigne pas de 0,5 °C)
 - Capteurs : **Eau In / Eau Out / Air**
+- Capteurs *Raw* : **Super / Accueil / Reg** (valeur affichée limitée à 255 caractères, réponse complète dans l'attribut `raw`)
 - Switchs : **PAC – Alimentation** & **Éclairage**
 - **Config Flow** (IP/Port + Auth)
 - Exemples Lovelace (`examples/`)
