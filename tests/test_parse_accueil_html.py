@@ -52,8 +52,32 @@ parse_accueil_html = coordinator.parse_accueil_html
 
 
 def test_parse_accueil_html_parses_values():
-    raw = "Chaud 28,1°C quelque chose (30°C)"
+    raw = (
+        "Mode&nbsp;:&nbsp;Chaud<br>"
+        "Mode de r&eacute;gulation&nbsp;:&nbsp;Auto<br>"
+        "Pompe&nbsp;:&nbsp;ON<br>"
+        "Chauffage&nbsp;:&nbsp;OFF<br>"
+        "Prochaine action&nbsp;:&nbsp;Rien<br>"
+        "&Eacute;tat g&eacute;n&eacute;ral&nbsp;:&nbsp;Ok<br>"
+        "&Eacute;cart consigne&nbsp;:&nbsp;1,2&deg;C<br>"
+        "Temp&eacute;rature air&nbsp;:&nbsp;25,5&deg;C<br>"
+        "Tension&nbsp;:&nbsp;230,0 V<br>"
+        "Temp&eacute;rature interne&nbsp;:&nbsp;30&deg;C<br>"
+        "Horloge&nbsp;:&nbsp;12:34<br>"
+        "Chaud 28,1&deg;C quelque chose (30&deg;C)"
+    )
     result = parse_accueil_html(raw)
+    assert result["mode"] == "Chaud"
+    assert result["reg_mode"] == "Auto"
+    assert result["pump"] == "ON"
+    assert result["heat"] == "OFF"
+    assert result["next_action"] == "Rien"
+    assert result["general_state"].lower() == "ok"
+    assert result["delta_setpoint"] == 1.2
+    assert result["air_temp"] == 25.5
+    assert result["voltage"] == 230.0
+    assert result["internal_temp"] == 30.0
+    assert result["clock"] == "12:34"
     assert result["water_in"] == 28.1
     assert result["setpoint"] == 30.0
 
