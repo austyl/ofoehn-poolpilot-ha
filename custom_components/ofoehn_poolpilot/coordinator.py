@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+import html
 from typing import Any, Dict, Optional
 
 from aiohttp import BasicAuth, ClientResponseError, ClientSession
@@ -143,18 +144,48 @@ class OFoehnApi:
             return False
 
 
-def parse_accueil_html(raw: str) -> Dict[str, float]:
-    match = re.search(r"Chaud\s+([\d.,]+)°C.*?\(([\d.,]+)°C\)", raw)
-    if not match:
+def parse_accueil_html(raw: str) -> Dict[str, Any]:
+    raw = html.unescape(raw)
+    result: Dict[str, Any] = {}
+
+    patterns = {
+        "mode": r"Mode\s*:\s*([^<]+)",
+        "reg_mode": r"Mode de régulation\s*:\s*([^<]+)",
+        "pump": r"Pompe\s*:\s*([^<]+)",
+        "heat": r"Chauffage\s*:\s*([^<]+)",
+        "next_action": r"Prochaine action\s*:\s*([^<]+)",
+        "general_state": r"État général\s*:\s*([^<]+)",
+        "delta_setpoint": r"Écart consigne\s*:\s*([0-9.,]+)",
+        "air_temp": r"Température air\s*:\s*([0-9.,]+)",
+        "voltage": r"Tension\s*:\s*([0-9.,]+)",
+        "internal_temp": r"Température interne\s*:\s*([0-9.,]+)",
+        "clock": r"Horloge\s*:\s*([^<]+)",
+    }
+
+    for key, pattern in patterns.items():
+        m = re.search(pattern, raw, re.IGNORECASE)
+        if not m:
+            continue
+        value = m.group(1).strip()
+        if key in {"delta_setpoint", "air_temp", "voltage", "internal_temp"}:
+            try:
+                result[key] = float(value.replace(',', '.'))
+            except Exception:
+                _LOGGER.debug("Error parsing %s from accueil HTML: %s", key, value)
+        else:
+            result[key] = value
+
+    match = re.search(r"Chaud\s+([\d.,]+)°C.*?\(([\d.,]+)°C\)", raw, re.IGNORECASE)
+    if match:
+        try:
+            result["water_in"] = float(match.group(1).replace(',', '.'))
+            result["setpoint"] = float(match.group(2).replace(',', '.'))
+        except Exception:
+            _LOGGER.debug("Error parsing water values from accueil HTML: %s", raw)
+
+    if not result:
         _LOGGER.debug("Failed to parse accueil HTML: %s", raw)
-        return {}
-    try:
-        water_in = float(match.group(1).replace(',', '.'))
-        setpoint = float(match.group(2).replace(',', '.'))
-    except Exception:
-        _LOGGER.debug("Error parsing accueil HTML: %s", raw)
-        return {}
-    return {"water_in": water_in, "setpoint": setpoint}
+    return result
 
 
 def parse_donnees(raw: str) -> Dict[int, float]:
