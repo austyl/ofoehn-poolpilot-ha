@@ -1,20 +1,23 @@
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Dict, Optional
 
-from aiohttp import ClientSession, BasicAuth, ClientResponseError
+from aiohttp import BasicAuth, ClientResponseError, ClientSession
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from .const import (
-    ENDPOINTS,
+    AUTH_BASIC,
+    AUTH_COOKIE,
+    AUTH_NONE,
+    AUTH_QUERY,
     DEFAULT_INDEX,
     DEFAULT_TIMEOUT,
-    AUTH_NONE,
-    AUTH_BASIC,
-    AUTH_QUERY,
-    AUTH_COOKIE,
+    ENDPOINTS,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 class OFoehnApi:
     def __init__(
@@ -143,11 +146,13 @@ class OFoehnApi:
 def parse_accueil_html(raw: str) -> Dict[str, float]:
     match = re.search(r"Chaud\s+([\d.,]+)°C.*?\(([\d.,]+)°C\)", raw)
     if not match:
+        _LOGGER.debug("Failed to parse accueil HTML: %s", raw)
         return {}
     try:
         water_in = float(match.group(1).replace(',', '.'))
         setpoint = float(match.group(2).replace(',', '.'))
     except Exception:
+        _LOGGER.debug("Error parsing accueil HTML: %s", raw)
         return {}
     return {"water_in": water_in, "setpoint": setpoint}
 
@@ -158,7 +163,10 @@ def parse_donnees(raw: str) -> Dict[int, float]:
         try:
             out[int(m.group(1))] = float(m.group(2))
         except Exception:
+            _LOGGER.debug("Error parsing donnees entry: %s", m.group(0))
             continue
+    if not out:
+        _LOGGER.debug("No donnees parsed from: %s", raw)
     return out
 
 
@@ -168,12 +176,14 @@ def parse_reg(raw: str) -> Dict[str, Any]:
     try:
         setpoint = float(line.split(",", 1)[0])
     except Exception:
-        pass
+        _LOGGER.debug("Failed to parse setpoint from reg: %s", raw)
     mode = "AUTO"
     if "CHAUD" in line.upper():
         mode = "CHAUD"
     elif "FROID" in line.upper():
         mode = "FROID"
+    else:
+        _LOGGER.debug("Failed to determine mode from reg: %s", raw)
     return {"setpoint": setpoint, "mode": mode, "raw": raw}
 
 
@@ -187,6 +197,9 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
         sup = await self.api.read_super()
         acc = await self.api.read_accueil()
         reg = await self.api.read_reg()
+        self.logger.debug("super_raw: %s", sup)
+        self.logger.debug("accueil_raw: %s", acc)
+        self.logger.debug("reg_raw: %s", reg)
         parsed_accueil = parse_accueil_html(acc)
         return {
             "super_raw": sup,
