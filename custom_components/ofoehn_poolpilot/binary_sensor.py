@@ -11,10 +11,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator: OFoehnCoordinator = data["coordinator"]
     host = data["host"]
-
-    sensor = ConnectivityBinarySensor(coordinator, host)
-    async_add_entities([sensor], True)
-    data["connectivity_sensor"] = sensor
+    connectivity = ConnectivityBinarySensor(coordinator, host)
+    sensors = [
+        connectivity,
+        PumpBinarySensor(coordinator, host),
+        HeatingBinarySensor(coordinator, host),
+    ]
+    async_add_entities(sensors, True)
+    data["connectivity_sensor"] = connectivity
 
 
 class ConnectivityBinarySensor(CoordinatorEntity, BinarySensorEntity):
@@ -45,3 +49,53 @@ class ConnectivityBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._last_check = await self.coordinator.api.check_connection()
         self.async_write_ha_state()
         return self._last_check
+
+
+class PumpBinarySensor(CoordinatorEntity, BinarySensorEntity):
+    _attr_name = "O'Foehn Pompe"
+
+    def __init__(self, coordinator: OFoehnCoordinator, host: str) -> None:
+        super().__init__(coordinator)
+        self._host = host
+        self._attr_unique_id = f"ofoehn_pump_{host}"
+
+    @property
+    def device_info(self):
+        return {
+            "identifiers": {(DOMAIN, self._host)},
+            "name": "O'Foehn PoolPilot",
+            "manufacturer": "O'Foehn",
+            "model": "PoolPilot",
+        }
+
+    @property
+    def is_on(self) -> bool:
+        idx = self.coordinator.data["indices"].get("pump_idx")
+        if idx is None:
+            return False
+        return float(self.coordinator.data["super"].get(idx, 0)) > 0
+
+
+class HeatingBinarySensor(CoordinatorEntity, BinarySensorEntity):
+    _attr_name = "O'Foehn Chauffage"
+
+    def __init__(self, coordinator: OFoehnCoordinator, host: str) -> None:
+        super().__init__(coordinator)
+        self._host = host
+        self._attr_unique_id = f"ofoehn_heating_{host}"
+
+    @property
+    def device_info(self):
+        return {
+            "identifiers": {(DOMAIN, self._host)},
+            "name": "O'Foehn PoolPilot",
+            "manufacturer": "O'Foehn",
+            "model": "PoolPilot",
+        }
+
+    @property
+    def is_on(self) -> bool:
+        idx = self.coordinator.data["indices"].get("heating_idx")
+        if idx is None:
+            return False
+        return float(self.coordinator.data["super"].get(idx, 0)) > 0

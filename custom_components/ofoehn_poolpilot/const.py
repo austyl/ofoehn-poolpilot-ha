@@ -24,6 +24,10 @@ DEFAULT_INDEX = {
     "water_in_idx": 5,
     "water_out_idx": 6,
     "air_idx": 7,
+    "voltage_idx": 8,
+    "internal_idx": 9,
+    "pump_idx": 10,
+    "heating_idx": 11,
     "light_idx": 16,  # accueil.cgi souvent
     "power_idx": 24   # état alim (selon firmware)
 }

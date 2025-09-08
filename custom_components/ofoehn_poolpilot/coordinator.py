@@ -203,19 +203,33 @@ def parse_donnees(raw: str) -> Dict[int, float]:
 
 def parse_reg(raw: str) -> Dict[str, Any]:
     line = raw.split("\n", 1)[0]
+    parts = [p.strip() for p in line.split(",")]
     setpoint = None
-    try:
-        setpoint = float(line.split(",", 1)[0])
-    except Exception:
-        _LOGGER.debug("Failed to parse setpoint from reg: %s", raw)
+    if parts:
+        try:
+            setpoint = float(parts[0])
+        except Exception:
+            _LOGGER.debug("Failed to parse setpoint from reg: %s", raw)
     mode = "AUTO"
-    if "CHAUD" in line.upper():
-        mode = "CHAUD"
-    elif "FROID" in line.upper():
-        mode = "FROID"
+    if len(parts) > 1:
+        p1 = parts[1].upper()
+        if "CHAUD" in p1:
+            mode = "CHAUD"
+        elif "FROID" in p1:
+            mode = "FROID"
     else:
         _LOGGER.debug("Failed to determine mode from reg: %s", raw)
-    return {"setpoint": setpoint, "mode": mode, "raw": raw}
+    regulation = parts[2] if len(parts) > 2 else None
+    next_action = parts[3] if len(parts) > 3 else None
+    status = parts[4] if len(parts) > 4 else None
+    return {
+        "setpoint": setpoint,
+        "mode": mode,
+        "regulation": regulation,
+        "next_action": next_action,
+        "status": status,
+        "raw": raw,
+    }
 
 
 class OFoehnCoordinator(DataUpdateCoordinator[dict]):
@@ -245,6 +259,10 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
                 "water_in_idx": self.options.get("water_in_idx", DEFAULT_INDEX["water_in_idx"]),
                 "water_out_idx": self.options.get("water_out_idx", DEFAULT_INDEX["water_out_idx"]),
                 "air_idx": self.options.get("air_idx", DEFAULT_INDEX["air_idx"]),
+                "voltage_idx": self.options.get("voltage_idx", DEFAULT_INDEX["voltage_idx"]),
+                "internal_idx": self.options.get("internal_idx", DEFAULT_INDEX["internal_idx"]),
+                "pump_idx": self.options.get("pump_idx", DEFAULT_INDEX["pump_idx"]),
+                "heating_idx": self.options.get("heating_idx", DEFAULT_INDEX["heating_idx"]),
                 "light_idx": self.options.get("light_idx", DEFAULT_INDEX["light_idx"]),
                 "power_idx": self.options.get("power_idx", DEFAULT_INDEX["power_idx"]),
             }
