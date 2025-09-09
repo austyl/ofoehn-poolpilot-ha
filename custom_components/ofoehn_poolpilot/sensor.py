@@ -7,6 +7,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import OFoehnCoordinator
+from .helpers import device_info_for_host
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -46,12 +47,7 @@ class TempSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._host)},
-            "name": "O'Foehn PoolPilot",
-            "manufacturer": "O'Foehn",
-            "model": "PoolPilot",
-        }
+        return device_info_for_host(self._host)
 
     @property
     def native_value(self):
@@ -85,12 +81,7 @@ class VoltageSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._host)},
-            "name": "O'Foehn PoolPilot",
-            "manufacturer": "O'Foehn",
-            "model": "PoolPilot",
-        }
+        return device_info_for_host(self._host)
 
     @property
     def native_value(self):
@@ -118,12 +109,7 @@ class SetpointDiffSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._host)},
-            "name": "O'Foehn PoolPilot",
-            "manufacturer": "O'Foehn",
-            "model": "PoolPilot",
-        }
+        return device_info_for_host(self._host)
 
     @property
     def native_value(self):
@@ -146,12 +132,7 @@ class RegTextSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._host)},
-            "name": "O'Foehn PoolPilot",
-            "manufacturer": "O'Foehn",
-            "model": "PoolPilot",
-        }
+        return device_info_for_host(self._host)
 
     @property
     def native_value(self):
@@ -170,12 +151,7 @@ class RawSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._host)},
-            "name": "O'Foehn PoolPilot",
-            "manufacturer": "O'Foehn",
-            "model": "PoolPilot",
-        }
+        return device_info_for_host(self._host)
 
     @property
     def native_value(self):
