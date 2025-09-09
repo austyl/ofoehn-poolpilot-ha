@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import html
 import logging
 import re
-import html
-from typing import Any, Dict, Optional
+from datetime import timedelta
+from typing import Any, Optional
 
 from aiohttp import BasicAuth, ClientResponseError, ClientSession
 from homeassistant.core import HomeAssistant
@@ -47,7 +48,7 @@ class OFoehnApi:
         self._basic_auth = BasicAuth(username, password) if (auth_mode == AUTH_BASIC and username) else None
         self._timeout = timeout
 
-    def _url(self, path: str, query: Dict[str, Any] | None = None) -> str:
+    def _url(self, path: str, query: dict[str, Any] | None = None) -> str:
         url = self._base + path
         if self._auth_mode == AUTH_QUERY and self._username and self._password:
             q = query.copy() if query else {}
@@ -74,7 +75,7 @@ class OFoehnApi:
             async with self._session.post(url, data=data, timeout=self._timeout) as resp:
                 resp.raise_for_status()
 
-    async def _fetch(self, method: str, path: str, *, data: Any | None = None, query: Dict[str, Any] | None = None) -> str:
+    async def _fetch(self, method: str, path: str, *, data: Any | None = None, query: dict[str, Any] | None = None) -> str:
         url = self._url(path, query=query)
         try:
             if method == "GET":
@@ -144,9 +145,9 @@ class OFoehnApi:
             return False
 
 
-def parse_accueil_html(raw: str) -> Dict[str, Any]:
+def parse_accueil_html(raw: str) -> dict[str, Any]:
     raw = html.unescape(raw)
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
 
     patterns = {
         "mode": r"Mode\s*:\s*([^<]+)",
@@ -188,8 +189,8 @@ def parse_accueil_html(raw: str) -> Dict[str, Any]:
     return result
 
 
-def parse_donnees(raw: str) -> Dict[int, float]:
-    out: Dict[int, float] = {}
+def parse_donnees(raw: str) -> dict[int, float]:
+    out: dict[int, float] = {}
     for m in re.finditer(r"DONNEE(\d+)=([0-9.]+)", raw):
         try:
             out[int(m.group(1))] = float(m.group(2))
@@ -201,7 +202,7 @@ def parse_donnees(raw: str) -> Dict[int, float]:
     return out
 
 
-def parse_reg(raw: str) -> Dict[str, Any]:
+def parse_reg(raw: str) -> dict[str, Any]:
     line = raw.split("\n", 1)[0]
     parts = [p.strip() for p in line.split(",")]
     setpoint = None
@@ -233,7 +234,15 @@ def parse_reg(raw: str) -> Dict[str, Any]:
 
 
 class OFoehnCoordinator(DataUpdateCoordinator[dict]):
-    def __init__(self, hass: HomeAssistant, logger, name: str, api: OFoehnApi, update_interval, options) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        logger: logging.Logger,
+        name: str,
+        api: OFoehnApi,
+        update_interval: timedelta,
+        options: dict[str, Any] | None,
+    ) -> None:
         super().__init__(hass, logger, name=name, update_interval=update_interval)
         self.api = api
         self.options = options or {}
