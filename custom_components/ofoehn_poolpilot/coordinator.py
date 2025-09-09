@@ -21,6 +21,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 class OFoehnApi:
+    """Client for interacting with the PoolPilot HTTP API."""
     def __init__(
         self,
         host: str,
@@ -145,6 +146,7 @@ class OFoehnApi:
 
 
 def parse_accueil_html(raw: str) -> Dict[str, Any]:
+    """Parse HTML from the accueil page into structured data."""
     raw = html.unescape(raw)
     result: Dict[str, Any] = {}
 
@@ -189,6 +191,7 @@ def parse_accueil_html(raw: str) -> Dict[str, Any]:
 
 
 def parse_donnees(raw: str) -> Dict[int, float]:
+    """Parse DONNEE values from a raw response string."""
     out: Dict[int, float] = {}
     for m in re.finditer(r"DONNEE(\d+)=([0-9.]+)", raw):
         try:
@@ -202,6 +205,7 @@ def parse_donnees(raw: str) -> Dict[int, float]:
 
 
 def parse_reg(raw: str) -> Dict[str, Any]:
+    """Parse register data into a dictionary."""
     line = raw.split("\n", 1)[0]
     parts = [p.strip() for p in line.split(",")]
     setpoint = None
@@ -233,6 +237,8 @@ def parse_reg(raw: str) -> Dict[str, Any]:
 
 
 class OFoehnCoordinator(DataUpdateCoordinator[dict]):
+    """Coordinator fetching data from the PoolPilot controller."""
+
     def __init__(self, hass: HomeAssistant, logger, name: str, api: OFoehnApi, update_interval, options) -> None:
         super().__init__(hass, logger, name=name, update_interval=update_interval)
         self.api = api

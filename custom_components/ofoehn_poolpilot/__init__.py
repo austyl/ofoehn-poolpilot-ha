@@ -16,10 +16,12 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the O'Foehn PoolPilot integration."""
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up O'Foehn PoolPilot from a config entry."""
     session: ClientSession = async_get_clientsession(hass)
 
     api = OFoehnApi(
@@ -54,6 +56,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     }
 
     async def _async_check_connection_service(call):
+        """Run a connectivity check service for all configured hosts."""
         results = {}
         for eid, info in hass.data.get(DOMAIN, {}).items():
             sensor = info.get("connectivity_sensor")
@@ -77,6 +80,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload an O'Foehn PoolPilot config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
@@ -86,4 +90,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle options update for the config entry."""
     await hass.config_entries.async_reload(entry.entry_id)
