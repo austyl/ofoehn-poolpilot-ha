@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from aiohttp import ClientSession
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 
@@ -53,8 +53,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "port": entry.data.get("port", 80),
     }
 
-    async def _async_check_connection_service(call):
-        results = {}
+    async def _async_check_connection_service(call: ServiceCall) -> dict[str, bool]:
+        results: dict[str, bool] = {}
         for eid, info in hass.data.get(DOMAIN, {}).items():
             sensor = info.get("connectivity_sensor")
             if sensor is not None:
