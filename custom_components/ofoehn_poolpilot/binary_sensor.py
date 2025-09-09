@@ -8,6 +8,7 @@ from .coordinator import OFoehnCoordinator
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
+    """Set up O'Foehn PoolPilot binary sensors."""
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator: OFoehnCoordinator = data["coordinator"]
     host = data["host"]
@@ -22,6 +23,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class ConnectivityBinarySensor(CoordinatorEntity, BinarySensorEntity):
+    """Binary sensor reporting controller connectivity."""
     _attr_name = "O'Foehn PoolPilot Connectivity"
 
     def __init__(self, coordinator: OFoehnCoordinator, host: str) -> None:
@@ -52,6 +54,7 @@ class ConnectivityBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
 
 class PumpBinarySensor(CoordinatorEntity, BinarySensorEntity):
+    """Binary sensor indicating whether the pump is running."""
     _attr_name = "O'Foehn Pompe"
 
     def __init__(self, coordinator: OFoehnCoordinator, host: str) -> None:
@@ -77,6 +80,7 @@ class PumpBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
 
 class HeatingBinarySensor(CoordinatorEntity, BinarySensorEntity):
+    """Binary sensor indicating whether heating is active."""
     _attr_name = "O'Foehn Chauffage"
 
     def __init__(self, coordinator: OFoehnCoordinator, host: str) -> None:

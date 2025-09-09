@@ -10,6 +10,7 @@ from .coordinator import OFoehnCoordinator
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
+    """Set up O'Foehn PoolPilot sensors."""
     data = hass.data[DOMAIN][entry.entry_id]
     coord: OFoehnCoordinator = data["coordinator"]
     host = data["host"]
@@ -35,6 +36,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class TempSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for a PoolPilot temperature reading."""
     _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
 
     def __init__(self, coordinator: OFoehnCoordinator, host: str, entry_id: str, key: str, name: str):
@@ -74,6 +76,7 @@ class TempSensor(CoordinatorEntity, SensorEntity):
 
 
 class VoltageSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for the PoolPilot voltage."""
     _attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
 
     def __init__(self, coordinator: OFoehnCoordinator, host: str, entry_id: str, key: str, name: str):
@@ -108,6 +111,7 @@ class VoltageSensor(CoordinatorEntity, SensorEntity):
 
 
 class SetpointDiffSensor(CoordinatorEntity, SensorEntity):
+    """Sensor tracking the difference to the target setpoint."""
     _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
 
     def __init__(self, coordinator: OFoehnCoordinator, host: str, entry_id: str):
@@ -135,6 +139,7 @@ class SetpointDiffSensor(CoordinatorEntity, SensorEntity):
 
 
 class RegTextSensor(CoordinatorEntity, SensorEntity):
+    """Diagnostic sensor exposing regulator text fields."""
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator: OFoehnCoordinator, host: str, entry_id: str, key: str, name: str):
@@ -159,6 +164,7 @@ class RegTextSensor(CoordinatorEntity, SensorEntity):
 
 
 class RawSensor(CoordinatorEntity, SensorEntity):
+    """Diagnostic sensor providing raw API responses."""
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator: OFoehnCoordinator, host: str, entry_id: str, key: str, name: str):

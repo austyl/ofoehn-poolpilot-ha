@@ -22,6 +22,7 @@ AUTH_OPTIONS = [AUTH_NONE, AUTH_BASIC, AUTH_QUERY, AUTH_COOKIE]
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for the O'Foehn PoolPilot integration."""
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
@@ -52,6 +53,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options for the O'Foehn PoolPilot integration."""
+
     def __init__(self, config_entry):
         self.config_entry = config_entry
 

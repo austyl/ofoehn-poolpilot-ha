@@ -8,6 +8,7 @@ from .coordinator import OFoehnCoordinator
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
+    """Set up O'Foehn PoolPilot switches."""
     data = hass.data[DOMAIN][entry.entry_id]
     coord: OFoehnCoordinator = data["coordinator"]
     host = data["host"]
@@ -16,7 +17,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class PowerSwitch(CoordinatorEntity, SwitchEntity):
+    """Switch to control the PoolPilot power state."""
     _attr_name = "PAC – Alimentation"
+
     def __init__(self, coordinator, host):
         super().__init__(coordinator)
         self._host = host
@@ -48,6 +51,7 @@ class PowerSwitch(CoordinatorEntity, SwitchEntity):
 
 
 class PoolLightSwitch(CoordinatorEntity, SwitchEntity):
+    """Switch to control pool lighting."""
     _attr_name = "Éclairage piscine"
 
     def __init__(self, coordinator: OFoehnCoordinator, host: str):

@@ -12,6 +12,7 @@ SUPPORTED_HVAC = [HVACMode.OFF, HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO]
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
+    """Set up the O'Foehn climate entity."""
     data = hass.data[DOMAIN][entry.entry_id]
     coord: OFoehnCoordinator = data["coordinator"]
     host = data["host"]
@@ -19,6 +20,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class OFoehnClimate(CoordinatorEntity, ClimateEntity):
+    """Representation of the PoolPilot climate controller."""
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = SUPPORTED_HVAC
