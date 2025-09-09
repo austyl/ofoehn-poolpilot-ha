@@ -55,8 +55,22 @@ class TempSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self):
-        idx = self.coordinator.data["indices"][self._key]
-        return self.coordinator.data["super"].get(idx)
+        idx = self.coordinator.data["indices"].get(self._key)
+        value = None
+        if idx is not None:
+            value = self.coordinator.data["super"].get(idx)
+            if value is not None:
+                return value
+        fallback_map = {
+            "water_in_idx": "water_in",
+            "water_out_idx": "water_out",
+            "air_idx": "air_temp",
+            "internal_idx": "internal_temp",
+        }
+        fb_key = fallback_map.get(self._key)
+        if fb_key:
+            return self.coordinator.data.get(fb_key)
+        return value
 
 
 class VoltageSensor(CoordinatorEntity, SensorEntity):
@@ -81,9 +95,16 @@ class VoltageSensor(CoordinatorEntity, SensorEntity):
     @property
     def native_value(self):
         idx = self.coordinator.data["indices"].get(self._key)
-        if idx is None:
-            return None
-        return self.coordinator.data["super"].get(idx)
+        value = None
+        if idx is not None:
+            value = self.coordinator.data["super"].get(idx)
+            if value is not None:
+                return value
+        fallback_map = {"voltage_idx": "voltage"}
+        fb_key = fallback_map.get(self._key)
+        if fb_key:
+            return self.coordinator.data.get(fb_key)
+        return value
 
 
 class SetpointDiffSensor(CoordinatorEntity, SensorEntity):
