@@ -3,6 +3,9 @@ from __future__ import annotations
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+from .coordinator import OFoehnApi, parse_donnees
 
 from .const import (
     DOMAIN,
@@ -57,26 +60,132 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             return self.async_create_entry(title="Options", data=user_input)
 
         oi = self.config_entry.options or {}
-        schema = vol.Schema(
-            {
-                vol.Optional("water_in_idx", default=oi.get("water_in_idx", DEFAULT_INDEX["water_in_idx"])): int,
-                vol.Optional(
-                    "water_out_idx", default=oi.get("water_out_idx", DEFAULT_INDEX["water_out_idx"])
-                ): int,
-                vol.Optional("air_idx", default=oi.get("air_idx", DEFAULT_INDEX["air_idx"])): int,
-                vol.Optional(
-                    "voltage_idx", default=oi.get("voltage_idx", DEFAULT_INDEX["voltage_idx"])
-                ): int,
-                vol.Optional(
-                    "internal_idx", default=oi.get("internal_idx", DEFAULT_INDEX["internal_idx"])
-                ): int,
-                vol.Optional("pump_idx", default=oi.get("pump_idx", DEFAULT_INDEX["pump_idx"])): int,
-                vol.Optional(
-                    "heating_idx", default=oi.get("heating_idx", DEFAULT_INDEX["heating_idx"])
-                ): int,
-                vol.Optional("light_idx", default=oi.get("light_idx", DEFAULT_INDEX["light_idx"])): int,
-                vol.Optional("power_idx", default=oi.get("power_idx", DEFAULT_INDEX["power_idx"])): int,
-            }
+        errors = {}
+        donnees = {}
+
+        session = async_get_clientsession(self.hass)
+        api = OFoehnApi(
+            host=self.config_entry.data["host"],
+            port=self.config_entry.data.get("port", DEFAULT_PORT),
+            session=session,
+            auth_mode=self.config_entry.data.get("auth_mode", AUTH_NONE),
+            username=self.config_entry.data.get("username"),
+            password=self.config_entry.data.get("password"),
+            login_path=self.config_entry.data.get("login_path", "/login.cgi"),
+            login_method=self.config_entry.data.get("login_method", "POST"),
+            user_field=self.config_entry.data.get("user_field", "user"),
+            pass_field=self.config_entry.data.get("pass_field", "pass"),
+            timeout=self.config_entry.data.get("timeout", DEFAULT_TIMEOUT),
         )
-        return self.async_show_form(step_id="init", data_schema=schema)
+
+        try:
+            raw = await api.read_super()
+            donnees = parse_donnees(raw)
+        except Exception:
+            errors["base"] = "cannot_connect"
+            donnees = {}
+
+        if donnees:
+            select = {
+                "selector": {
+                    "select": {
+                        "options": [
+                            {"value": i, "label": f"{i} ({v})"}
+                            for i, v in sorted(donnees.items())
+                        ]
+                    }
+                }
+            }
+            schema = vol.Schema(
+                {
+                    vol.Optional(
+                        "water_in_idx",
+                        default=oi.get("water_in_idx", DEFAULT_INDEX["water_in_idx"]),
+                        description=select,
+                    ): int,
+                    vol.Optional(
+                        "water_out_idx",
+                        default=oi.get("water_out_idx", DEFAULT_INDEX["water_out_idx"]),
+                        description=select,
+                    ): int,
+                    vol.Optional(
+                        "air_idx",
+                        default=oi.get("air_idx", DEFAULT_INDEX["air_idx"]),
+                        description=select,
+                    ): int,
+                    vol.Optional(
+                        "voltage_idx",
+                        default=oi.get("voltage_idx", DEFAULT_INDEX["voltage_idx"]),
+                        description=select,
+                    ): int,
+                    vol.Optional(
+                        "internal_idx",
+                        default=oi.get("internal_idx", DEFAULT_INDEX["internal_idx"]),
+                        description=select,
+                    ): int,
+                    vol.Optional(
+                        "pump_idx",
+                        default=oi.get("pump_idx", DEFAULT_INDEX["pump_idx"]),
+                        description=select,
+                    ): int,
+                    vol.Optional(
+                        "heating_idx",
+                        default=oi.get("heating_idx", DEFAULT_INDEX["heating_idx"]),
+                        description=select,
+                    ): int,
+                    vol.Optional(
+                        "light_idx",
+                        default=oi.get("light_idx", DEFAULT_INDEX["light_idx"]),
+                        description=select,
+                    ): int,
+                    vol.Optional(
+                        "power_idx",
+                        default=oi.get("power_idx", DEFAULT_INDEX["power_idx"]),
+                        description=select,
+                    ): int,
+                }
+            )
+        else:
+            schema = vol.Schema(
+                {
+                    vol.Optional(
+                        "water_in_idx",
+                        default=oi.get("water_in_idx", DEFAULT_INDEX["water_in_idx"]),
+                    ): int,
+                    vol.Optional(
+                        "water_out_idx",
+                        default=oi.get("water_out_idx", DEFAULT_INDEX["water_out_idx"]),
+                    ): int,
+                    vol.Optional(
+                        "air_idx",
+                        default=oi.get("air_idx", DEFAULT_INDEX["air_idx"]),
+                    ): int,
+                    vol.Optional(
+                        "voltage_idx",
+                        default=oi.get("voltage_idx", DEFAULT_INDEX["voltage_idx"]),
+                    ): int,
+                    vol.Optional(
+                        "internal_idx",
+                        default=oi.get("internal_idx", DEFAULT_INDEX["internal_idx"]),
+                    ): int,
+                    vol.Optional(
+                        "pump_idx",
+                        default=oi.get("pump_idx", DEFAULT_INDEX["pump_idx"]),
+                    ): int,
+                    vol.Optional(
+                        "heating_idx",
+                        default=oi.get("heating_idx", DEFAULT_INDEX["heating_idx"]),
+                    ): int,
+                    vol.Optional(
+                        "light_idx",
+                        default=oi.get("light_idx", DEFAULT_INDEX["light_idx"]),
+                    ): int,
+                    vol.Optional(
+                        "power_idx",
+                        default=oi.get("power_idx", DEFAULT_INDEX["power_idx"]),
+                    ): int,
+                }
+            )
+
+        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
 
