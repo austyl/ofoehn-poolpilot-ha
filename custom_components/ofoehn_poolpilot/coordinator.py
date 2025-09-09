@@ -253,8 +253,7 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
             "super": parse_donnees(sup),
             "accueil": parse_donnees(acc),
             "reg": parse_reg(reg),
-            "water_in": parsed_accueil.get("water_in"),
-            "setpoint": parsed_accueil.get("setpoint"),
+            **parsed_accueil,
             "indices": {
                 "water_in_idx": self.options.get("water_in_idx", DEFAULT_INDEX["water_in_idx"]),
                 "water_out_idx": self.options.get("water_out_idx", DEFAULT_INDEX["water_out_idx"]),
