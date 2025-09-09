@@ -7,6 +7,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import OFoehnCoordinator
+from .helpers import device_info_for_host
 
 SUPPORTED_HVAC = [HVACMode.OFF, HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO]
 
@@ -35,12 +36,7 @@ class OFoehnClimate(CoordinatorEntity, ClimateEntity):
 
     @property
     def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._host)},
-            "name": "O'Foehn PoolPilot",
-            "manufacturer": "O'Foehn",
-            "model": "PoolPilot",
-        }
+        return device_info_for_host(self._host)
 
     def _is_power_on(self):
         idx = self.coordinator.data["indices"].get("power_idx")

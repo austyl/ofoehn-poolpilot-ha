@@ -5,6 +5,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import OFoehnCoordinator
+from .helpers import device_info_for_host
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -24,12 +25,7 @@ class PowerSwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._host)},
-            "name": "O'Foehn PoolPilot",
-            "manufacturer": "O'Foehn",
-            "model": "PoolPilot",
-        }
+        return device_info_for_host(self._host)
 
     @property
     def is_on(self):
@@ -57,12 +53,7 @@ class PoolLightSwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._host)},
-            "name": "O'Foehn PoolPilot",
-            "manufacturer": "O'Foehn",
-            "model": "PoolPilot",
-        }
+        return device_info_for_host(self._host)
 
     @property
     def is_on(self):
