@@ -190,9 +190,9 @@ def parse_accueil_html(raw: str) -> Dict[str, Any]:
 
 def parse_donnees(raw: str) -> Dict[int, float]:
     out: Dict[int, float] = {}
-    for m in re.finditer(r"DONNEE(\d+)=([0-9.]+)", raw):
+    for m in re.finditer(r"DONNEE(\d+)=([-+]?[0-9.,]+)", raw):
         try:
-            out[int(m.group(1))] = float(m.group(2))
+            out[int(m.group(1))] = float(m.group(2).replace(',', '.'))
         except Exception:
             _LOGGER.debug("Error parsing donnees entry: %s", m.group(0))
             continue
