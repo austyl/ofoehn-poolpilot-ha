@@ -54,3 +54,9 @@ Exemples de regex :
 
 - Température d'eau : `r"DONNEE5=([0-9.]+)"` (indice `5` par défaut pour `Eau In`, à adapter selon votre configuration).
 - Consigne : `r"^([0-9.]+),"` (première valeur renvoyée par `getReg.cgi`).
+
+## 🛠️ Développement
+Ce projet utilise [pre-commit](https://pre-commit.com) pour lancer [ruff](https://docs.astral.sh/ruff/) et [mypy](https://mypy.readthedocs.io/) ainsi que vérifier les fins de fichier.
+
+1. Installer les dépendances : `pip install pre-commit`
+2. Exécuter les hooks : `pre-commit run --all-files`
