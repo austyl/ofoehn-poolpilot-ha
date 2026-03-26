@@ -53,7 +53,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry):
-        self.config_entry = config_entry
+        super().__init__()
 
     async def async_step_init(self, user_input=None):
         if user_input is not None:
@@ -85,6 +85,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             errors["base"] = "cannot_connect"
             donnees = {}
 
+        select = None
         if donnees:
             select = {
                 "selector": {
@@ -96,96 +97,18 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     }
                 }
             }
-            schema = vol.Schema(
-                {
-                    vol.Optional(
-                        "water_in_idx",
-                        default=oi.get("water_in_idx", DEFAULT_INDEX["water_in_idx"]),
-                        description=select,
-                    ): int,
-                    vol.Optional(
-                        "water_out_idx",
-                        default=oi.get("water_out_idx", DEFAULT_INDEX["water_out_idx"]),
-                        description=select,
-                    ): int,
-                    vol.Optional(
-                        "air_idx",
-                        default=oi.get("air_idx", DEFAULT_INDEX["air_idx"]),
-                        description=select,
-                    ): int,
-                    vol.Optional(
-                        "voltage_idx",
-                        default=oi.get("voltage_idx", DEFAULT_INDEX["voltage_idx"]),
-                        description=select,
-                    ): int,
-                    vol.Optional(
-                        "internal_idx",
-                        default=oi.get("internal_idx", DEFAULT_INDEX["internal_idx"]),
-                        description=select,
-                    ): int,
-                    vol.Optional(
-                        "pump_idx",
-                        default=oi.get("pump_idx", DEFAULT_INDEX["pump_idx"]),
-                        description=select,
-                    ): int,
-                    vol.Optional(
-                        "heating_idx",
-                        default=oi.get("heating_idx", DEFAULT_INDEX["heating_idx"]),
-                        description=select,
-                    ): int,
-                    vol.Optional(
-                        "light_idx",
-                        default=oi.get("light_idx", DEFAULT_INDEX["light_idx"]),
-                        description=select,
-                    ): int,
-                    vol.Optional(
-                        "power_idx",
-                        default=oi.get("power_idx", DEFAULT_INDEX["power_idx"]),
-                        description=select,
-                    ): int,
-                }
-            )
-        else:
-            schema = vol.Schema(
-                {
-                    vol.Optional(
-                        "water_in_idx",
-                        default=oi.get("water_in_idx", DEFAULT_INDEX["water_in_idx"]),
-                    ): int,
-                    vol.Optional(
-                        "water_out_idx",
-                        default=oi.get("water_out_idx", DEFAULT_INDEX["water_out_idx"]),
-                    ): int,
-                    vol.Optional(
-                        "air_idx",
-                        default=oi.get("air_idx", DEFAULT_INDEX["air_idx"]),
-                    ): int,
-                    vol.Optional(
-                        "voltage_idx",
-                        default=oi.get("voltage_idx", DEFAULT_INDEX["voltage_idx"]),
-                    ): int,
-                    vol.Optional(
-                        "internal_idx",
-                        default=oi.get("internal_idx", DEFAULT_INDEX["internal_idx"]),
-                    ): int,
-                    vol.Optional(
-                        "pump_idx",
-                        default=oi.get("pump_idx", DEFAULT_INDEX["pump_idx"]),
-                    ): int,
-                    vol.Optional(
-                        "heating_idx",
-                        default=oi.get("heating_idx", DEFAULT_INDEX["heating_idx"]),
-                    ): int,
-                    vol.Optional(
-                        "light_idx",
-                        default=oi.get("light_idx", DEFAULT_INDEX["light_idx"]),
-                    ): int,
-                    vol.Optional(
-                        "power_idx",
-                        default=oi.get("power_idx", DEFAULT_INDEX["power_idx"]),
-                    ): int,
-                }
-            )
+
+        schema_dict = {}
+        for idx_key in ["water_in_idx", "water_out_idx", "air_idx", "voltage_idx", 
+                        "internal_idx", "pump_idx", "heating_idx", "light_idx", "power_idx"]:
+            kwargs = {
+                "default": oi.get(idx_key, DEFAULT_INDEX[idx_key]),
+            }
+            if select:
+                kwargs["description"] = select
+            schema_dict[vol.Optional(idx_key, **kwargs)] = int
+
+        schema = vol.Schema(schema_dict)
 
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
 
