@@ -15,7 +15,6 @@ Version **v0.2.1** — Ajout de l'**authentification**: NONE / BASIC / QUERY / C
 - Capteurs *Raw* : **Super / Accueil / Reg** (valeur affichée limitée à 255 caractères, réponse complète dans l'attribut `raw`)
 - Switchs : **PAC – Alimentation** & **Éclairage**
 - **Config Flow** (IP/Port + Auth)
-- Exemples Lovelace (`examples/`)
 
 ## 🔐 Authentification
 - **NONE** : aucune auth
@@ -31,9 +30,6 @@ Personnalisables via **Options**.
 1. HACS → Dépôts personnalisés → Ajouter cet entrepôt (catégorie **Intégration**)
 2. Installer, puis **Redémarrer** Home Assistant
 3. **Paramètres → Appareils & services → Ajouter une intégration** → O'Foehn PoolPilot → saisir IP/Port/Auth
-
-## 🧩 Exemples Lovelace
-Voir `examples/` (full et compact) : jauges Eau In/Out/Air, carte Thermostat, historique 24 h, boutons PAC/Éclairage.
 
 ## 🛡️ Sécurité
 HTTP en clair : isolez la PAC (VLAN/IoT). Évitez le mode `QUERY` si possible (identifiants dans l'URL).
@@ -54,9 +50,3 @@ Exemples de regex :
 
 - Température d'eau : `r"DONNEE5=([0-9.]+)"` (indice `5` par défaut pour `Eau In`, à adapter selon votre configuration).
 - Consigne : `r"^([0-9.]+),"` (première valeur renvoyée par `getReg.cgi`).
-
-## 🛠️ Développement
-Ce projet utilise [pre-commit](https://pre-commit.com) pour lancer [ruff](https://docs.astral.sh/ruff/) et [mypy](https://mypy.readthedocs.io/) ainsi que vérifier les fins de fichier.
-
-1. Installer les dépendances : `pip install pre-commit`
-2. Exécuter les hooks : `pre-commit run --all-files`
