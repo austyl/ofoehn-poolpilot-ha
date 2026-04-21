@@ -27,19 +27,19 @@
       "invalid_auth": "Authentification refusée par la PAC.",
       "missing_auth": "Nom d'utilisateur et mot de passe requis pour ce mode.",
       "unknown": "Erreur inattendue."
-    },
-    "options": {
-      "step": {
-        "init": {
-          "title": "Options avancées",
-          "data": {
-            "scan_interval": "Intervalle de rafraîchissement (secondes)",
-            "water_in_idx": "Index DONNEE# Eau In",
-            "water_out_idx": "Index DONNEE# Eau Out",
-            "air_idx": "Index DONNEE# Air",
-            "light_idx": "Index DONNEE# Lumière",
-            "power_idx": "Index DONNEE# Alimentation/Marche"
-          }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options avancées",
+        "data": {
+          "scan_interval": "Intervalle de rafraîchissement (secondes)",
+          "water_in_idx": "Index DONNEE# Eau In",
+          "water_out_idx": "Index DONNEE# Eau Out",
+          "air_idx": "Index DONNEE# Air",
+          "light_idx": "Index DONNEE# Lumière",
+          "power_idx": "Index DONNEE# Alimentation/Marche"
         }
       }
     }

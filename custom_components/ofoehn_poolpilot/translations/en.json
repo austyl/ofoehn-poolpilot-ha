@@ -27,19 +27,19 @@
       "invalid_auth": "Authentication was rejected by the heat pump.",
       "missing_auth": "Username and password are required for this mode.",
       "unknown": "Unexpected error."
-    },
-    "options": {
-      "step": {
-        "init": {
-          "title": "Advanced options",
-          "data": {
-            "scan_interval": "Refresh interval (seconds)",
-            "water_in_idx": "DONNEE# index: Water In",
-            "water_out_idx": "DONNEE# index: Water Out",
-            "air_idx": "DONNEE# index: Air",
-            "light_idx": "DONNEE# index: Light",
-            "power_idx": "DONNEE# index: Power state"
-          }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Advanced options",
+        "data": {
+          "scan_interval": "Refresh interval (seconds)",
+          "water_in_idx": "DONNEE# index: Water In",
+          "water_out_idx": "DONNEE# index: Water Out",
+          "air_idx": "DONNEE# index: Air",
+          "light_idx": "DONNEE# index: Light",
+          "power_idx": "DONNEE# index: Power state"
         }
       }
     }

@@ -5,6 +5,9 @@
   "documentation": "https://github.com/austyl/ofoehn-poolpilot-ha",
   "issue_tracker": "https://github.com/austyl/ofoehn-poolpilot-ha/issues",
   "requirements": [],
+  "dependencies": [
+    "network"
+  ],
   "codeowners": [
     "@jfbrassens"
   ],
