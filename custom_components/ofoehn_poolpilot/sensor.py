@@ -266,13 +266,20 @@ class RegTextSensor(CoordinatorEntity, SensorEntity):
                 return fallback_mode
             return value or fallback_mode
 
+        if self._key == "status":
+            stopped_state = self.coordinator.data.get("stopped_state")
+            if stopped_state not in (None, "", "Inconnu"):
+                normalized = clean_html_text(stopped_state).lower()
+                if normalized not in {"normal", "marche", "en marche", "running"}:
+                    return stopped_state
+
         if value not in (None, "", "Inconnu"):
             return value
 
         fallback_keys = {
             "regulation": ("reg_mode",),
             "next_action": ("next_action",),
-            "status": ("general_state",),
+            "status": ("stopped_state", "general_state"),
         }
         for fallback_key in fallback_keys.get(self._key, ()):
             fallback_value = self.coordinator.data.get(fallback_key)

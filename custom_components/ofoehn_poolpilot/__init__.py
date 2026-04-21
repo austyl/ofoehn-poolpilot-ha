@@ -11,6 +11,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, PLATFORMS, SCAN_INTERVAL, DEFAULT_TIMEOUT
 from .coordinator import OFoehnApi, OFoehnCoordinator
+from .helpers import build_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,11 +47,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     await coordinator.async_config_entry_first_refresh()
 
+    entry_updates = dict(entry.data)
+    changed = False
+    for key in ("mac_address", "serial_number"):
+        value = coordinator.data.get(key)
+        if value and entry_updates.get(key) != value:
+            entry_updates[key] = value
+            changed = True
+    if changed:
+        hass.config_entries.async_update_entry(entry, data=entry_updates)
+
+    device_key = entry.unique_id or entry.entry_id
+    device_info = build_device_info(device_key, entry.data["host"], coordinator.data)
+
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "api": api,
         "coordinator": coordinator,
         "host": entry.data["host"],
         "port": entry.data.get("port", 80),
+        "device_key": device_key,
+        "device_info": device_info,
     }
 
     async def _async_check_connection_service(call: ServiceCall) -> dict[str, bool]:
