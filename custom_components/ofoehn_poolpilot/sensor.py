@@ -6,7 +6,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import OFoehnCoordinator, clean_html_text
+from .coordinator import OFoehnCoordinator, clean_html_lines, clean_html_text
 from .helpers import device_info_for_host
 
 
@@ -27,7 +27,32 @@ async def async_setup_entry(hass, entry, async_add_entities):
             RegTextSensor(coord, host, entry.entry_id, key="regulation", name="Régulation"),
             RegTextSensor(coord, host, entry.entry_id, key="next_action", name="Prochaine action"),
             RegTextSensor(coord, host, entry.entry_id, key="status", name="État général"),
+            DiagnosticValueSensor(coord, host, entry.entry_id, key="reg_value_1", name="Reg Valeur 1"),
+            DiagnosticValueSensor(coord, host, entry.entry_id, key="reg_value_2", name="Reg Valeur 2"),
+            DiagnosticValueSensor(coord, host, entry.entry_id, key="reg_value_3", name="Reg Valeur 3"),
+            DiagnosticValueSensor(coord, host, entry.entry_id, key="reg_value_4", name="Reg Valeur 4"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="reg_flag_1", name="Reg Flag 1"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="reg_flag_2", name="Reg Flag 2"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="reg_flag_3", name="Reg Flag 3"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="reg_flag_4", name="Reg Flag 4"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="reg_flag_5", name="Reg Flag 5"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="reg_flag_6", name="Reg Flag 6"),
             DiagnosticTextSensor(coord, host, entry.entry_id, key="firmware_version", name="Firmware"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="module_version", name="Version Module"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="module_build", name="Build Module"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="module_name", name="Module"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="serial_number", name="Numéro de série"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="mac_address", name="Adresse MAC"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="clock", name="Horloge"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="timers_summary", name="Timers"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="season_stop", name="Mode Saison"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="stopped_state", name="État arrêt"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="heat_state", name="État chauffage"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="signal_level", name="Niveau signal"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="option_1", name="Option 1"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="option_2", name="Option 2"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="config_code", name="Code Config"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="hardware_code", name="Code Hardware"),
             DiagnosticTextSensor(coord, host, entry.entry_id, key="webuser_role", name="Rôle WebUser"),
             DiagnosticTextSensor(coord, host, entry.entry_id, key="ph_license", name="Licence pH"),
             DiagnosticTextSensor(coord, host, entry.entry_id, key="ev_present", name="Présence EV"),
@@ -133,6 +158,27 @@ class DiagnosticTemperatureSensor(CoordinatorEntity, SensorEntity):
     _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 1
+
+    def __init__(self, coordinator: OFoehnCoordinator, host: str, entry_id: str, key: str, name: str):
+        super().__init__(coordinator)
+        self._key = key
+        self._attr_name = f"O'Foehn {name}"
+        self._attr_unique_id = f"ofoehn_diag_{key}_{host}"
+        self._host = host
+
+    @property
+    def device_info(self):
+        return device_info_for_host(self._host)
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get(self._key)
+
+
+class DiagnosticValueSensor(CoordinatorEntity, SensorEntity):
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 2
 
     def __init__(self, coordinator: OFoehnCoordinator, host: str, entry_id: str, key: str, name: str):
         super().__init__(coordinator)
@@ -272,7 +318,11 @@ class RawSensor(CoordinatorEntity, SensorEntity):
     def native_value(self):
         value = self.coordinator.data.get(self._key)
         preview = clean_html_text(value)
-        self._attr_extra_state_attributes = {"raw": value, "plain_text": preview}
+        self._attr_extra_state_attributes = {
+            "raw": value,
+            "plain_text": preview,
+            "lines": clean_html_lines(value),
+        }
         if value is None:
             return None
         return (preview or value)[:255]

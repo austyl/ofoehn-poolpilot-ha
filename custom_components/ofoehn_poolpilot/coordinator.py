@@ -27,6 +27,36 @@ WHITESPACE_RE = re.compile(r"\s+")
 DONNEE_RE = re.compile(r"DONNEE(\d+)=(-?\d+(?:[.,]\d+)?)")
 FLOAT_RE = re.compile(r"-?\d+(?:[.,]\d+)?")
 FIRMWARE_RE = re.compile(r"Version\s+V?([0-9.]+)", re.IGNORECASE)
+ACCUEIL_COMPACT_RE = re.compile(
+    r"(?P<mode>Chaud|Froid|Auto|OFF)\s+"
+    r"(?P<water_in>-?\d+(?:[.,]\d+)?)°C\s*\(\s*(?P<setpoint>-?\d+(?:[.,]\d+)?)°C\s*\)\s+"
+    r"(?P<regulation>.+?)\s+"
+    r"(?P<season_stop>Non\s*\(Automne\)|Oui\s*\(Automne\)|\S+\s*\([^)]+\)|\S+)\s+"
+    r"(?P<pump_state>Non|Oui|OFF|ON)\s+"
+    r"(?P<power_state>OFF|ON)\s+"
+    r"(?P<stopped_state>Arrêtée|Arretee|Marche|En marche|Stopped|\S+)\s+"
+    r"(?P<next_action>Aucune|Aucun|\S+)\s+"
+    r"(?P<general_state>Normal|Défaut|Defaut|Alarme|Alarm|\S+)\s+"
+    r"(?P<delta>-?\d+(?:[.,]\d+)?)°C\s+"
+    r"(?P<air_temp>-?\d+(?:[.,]\d+)?)°C\s+"
+    r"(?P<pressure_1>-?\d+(?:[.,]\d+)?)\s+"
+    r"(?P<pressure_2>-?\d+(?:[.,]\d+)?)\s+"
+    r"(?P<serial_number>\d{8,})\s+"
+    r"(?P<module_name>[A-Za-z][\w-]+)\s+"
+    r"(?P<timer_count>\d+)\s+TIMER\(s\)\s*:\s*(?P<timer_status>[A-Za-zéû]+)\s+"
+    r"(?P<device_date>\d{2}/\d{2}/\d{4})\s+(?P<device_time>\d{2}:\d{2}:\d{2})\s+"
+    r"(?P<mac_address>(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})\s+"
+    r"(?P<module_build>\S+)\s+"
+    r"(?P<module_version>[0-9]+(?:[.,][0-9]+)?)\s+"
+    r"(?P<option_1>En option|\S+)\s+"
+    r"(?P<option_2>En option|\S+)\s+"
+    r"(?P<signal_level>-?\d+)\s+"
+    r"(?P<voltage>-?\d+(?:[.,]\d+)?)V\s+"
+    r"(?P<internal_temp>-?\d+(?:[.,]\d+)?)°C\s+"
+    r"(?P<config_code>\S+)\s+"
+    r"(?P<hardware_code>\S+)",
+    re.IGNORECASE,
+)
 TEMP_PAIR_RE = re.compile(
     r"(-?\d+(?:[.,]\d+)?)\s*(?:°|&deg;)\s*C\s*\(\s*(-?\d+(?:[.,]\d+)?)\s*(?:°|&deg;)?\s*C?\s*\)",
     re.IGNORECASE,
@@ -44,6 +74,14 @@ def clean_html_text(raw: str | None) -> str:
     return WHITESPACE_RE.sub(" ", text).strip()
 
 
+def clean_html_lines(raw: str | None) -> list[str]:
+    """Return cleaned non-empty lines from a device payload."""
+    if not raw:
+        return []
+    lines = [clean_html_text(line) for line in raw.splitlines()]
+    return [line for line in lines if line]
+
+
 def _to_float(value: str | None) -> float | None:
     if value is None:
         return None
@@ -51,6 +89,15 @@ def _to_float(value: str | None) -> float | None:
         return float(value.replace(",", "."))
     except (AttributeError, TypeError, ValueError):
         return None
+
+
+def _extract_float(value: str | None) -> float | None:
+    if not value:
+        return None
+    match = FLOAT_RE.search(value)
+    if not match:
+        return None
+    return _to_float(match.group(0))
 
 
 def _normalize_mode(value: str | None) -> str | None:
@@ -100,6 +147,75 @@ def parse_page_metadata(raw: str) -> dict[str, Any]:
     if firmware_match:
         result["firmware_version"] = f"V{firmware_match.group(1)}"
     return result
+
+
+def parse_accueil_values(raw: str) -> dict[str, Any]:
+    """Parse the line-oriented accueil.cgi payload."""
+    lines = clean_html_lines(raw)
+    if len(lines) < 10:
+        return {}
+
+    def text_at(index: int) -> str | None:
+        return lines[index] if index < len(lines) else None
+
+    result: dict[str, Any] = {}
+
+    result["mode"] = _normalize_mode(text_at(0))
+
+    temp_pair = text_at(1)
+    if temp_pair:
+        match = TEMP_PAIR_RE.search(temp_pair)
+        if match:
+            result["water_in"] = _to_float(match.group(1))
+            result["setpoint"] = _to_float(match.group(2))
+
+    result["reg_mode"] = text_at(2)
+    result["season_stop"] = text_at(3)
+    result["heat_state"] = text_at(4)
+    result["pump_state"] = text_at(5)
+    result["pump_on"] = _is_enabled_text(text_at(5))
+    result["stopped_state"] = text_at(6)
+    result["next_action"] = text_at(7)
+    result["general_state"] = text_at(8)
+    result["delta"] = _extract_float(text_at(9))
+    result["air_temp"] = _extract_float(text_at(10))
+    result["pressure_1"] = _extract_float(text_at(11))
+    result["pressure_2"] = _extract_float(text_at(12))
+    result["serial_number"] = text_at(13)
+    result["module_name"] = text_at(14)
+
+    timer_count = text_at(15)
+    timer_status_line = text_at(16)
+    timer_status = None
+    if timer_status_line and ":" in timer_status_line:
+        timer_status = timer_status_line.split(":", 1)[1].strip()
+    result["timers_summary"] = (
+        f"{timer_count} actifs ({timer_status})"
+        if timer_count and timer_status
+        else timer_status_line
+    )
+
+    device_date = text_at(17)
+    device_time = text_at(18)
+    if device_date and device_time:
+        result["clock"] = f"{device_date} {device_time}"
+
+    result["mac_address"] = text_at(19)
+    result["module_build"] = text_at(20)
+    result["module_version"] = text_at(21)
+    result["option_1"] = text_at(22)
+    result["option_2"] = text_at(23)
+    result["signal_level"] = text_at(24)
+
+    voltage_text = text_at(25)
+    if voltage_text:
+        result["voltage"] = _extract_float(voltage_text)
+
+    result["internal_temp"] = _extract_float(text_at(26))
+    result["config_code"] = text_at(27)
+    result["hardware_code"] = text_at(28)
+    result["ph_license"] = text_at(29)
+    return {key: value for key, value in result.items() if value is not None}
 
 
 def parse_super_values(raw: str) -> dict[str, Any]:
@@ -300,7 +416,7 @@ class OFoehnApi:
 
 def parse_accueil_html(raw: str) -> dict[str, Any]:
     plain = clean_html_text(raw)
-    result: dict[str, Any] = {}
+    result: dict[str, Any] = parse_accueil_values(raw)
 
     patterns = {
         "mode": r"\bMode\s*:\s*(.+?)(?=\s+Mode de régulation\s*:|\s+Pompe\s*:|\s+Prochaine action\s*:|\s+État général\s*:|\s+Etat général\s*:|$)",
@@ -368,6 +484,58 @@ def parse_accueil_html(raw: str) -> dict[str, Any]:
         if next_action_match:
             result["next_action"] = next_action_match.group(1)
 
+    compact_match = ACCUEIL_COMPACT_RE.search(plain)
+    if compact_match:
+        compact = compact_match.groupdict()
+
+        if not result.get("mode"):
+            result["mode"] = _normalize_mode(compact.get("mode"))
+        if result.get("water_in") is None:
+            result["water_in"] = _to_float(compact.get("water_in"))
+        if result.get("setpoint") is None:
+            result["setpoint"] = _to_float(compact.get("setpoint"))
+        if not result.get("reg_mode"):
+            result["reg_mode"] = compact.get("regulation")
+        if not result.get("next_action"):
+            result["next_action"] = compact.get("next_action")
+        if not result.get("general_state"):
+            result["general_state"] = compact.get("general_state")
+
+        for key in (
+            "air_temp",
+            "pressure_1",
+            "pressure_2",
+            "delta",
+            "voltage",
+            "internal_temp",
+        ):
+            if result.get(key) is None:
+                result[key] = _to_float(compact.get(key))
+
+        result.setdefault("pump_state", compact.get("pump_state"))
+        result.setdefault("stopped_state", compact.get("stopped_state"))
+        result.setdefault("season_stop", compact.get("season_stop"))
+        result.setdefault("serial_number", compact.get("serial_number"))
+        result.setdefault("module_name", compact.get("module_name"))
+        result.setdefault(
+            "timers_summary",
+            f"{compact.get('timer_count')} actifs ({compact.get('timer_status')})"
+            if compact.get("timer_count") and compact.get("timer_status")
+            else None,
+        )
+        result.setdefault(
+            "clock",
+            f"{compact.get('device_date')} {compact.get('device_time')}"
+            if compact.get("device_date") and compact.get("device_time")
+            else None,
+        )
+        result.setdefault("mac_address", compact.get("mac_address"))
+        result.setdefault("module_build", compact.get("module_build"))
+        result.setdefault("module_version", compact.get("module_version"))
+        result.setdefault("signal_level", compact.get("signal_level"))
+        result.setdefault("config_code", compact.get("config_code"))
+        result.setdefault("hardware_code", compact.get("hardware_code"))
+
     if not result:
         _LOGGER.debug("Failed to parse accueil HTML: %s", raw)
     return result
@@ -387,6 +555,34 @@ def parse_donnees(raw: str) -> dict[int, float]:
 
 
 def parse_reg(raw: str) -> dict[str, Any]:
+    lines = clean_html_lines(raw)
+    if len(lines) >= 6:
+        numeric_values = [_to_float(value) for value in lines[1:5]]
+        result = {
+            "mode": _normalize_mode(lines[0]),
+            "setpoint": numeric_values[1] if len(numeric_values) > 1 else None,
+            "regulation": lines[5],
+            "raw": raw,
+            "values": lines,
+        }
+        for idx, value in enumerate(numeric_values, start=1):
+            if value is not None:
+                result[f"reg_value_{idx}"] = value
+
+        if len(lines) > 6:
+            result["reg_flag_1"] = lines[6]
+        if len(lines) > 7:
+            result["reg_flag_2"] = lines[7]
+        if len(lines) > 8:
+            result["reg_flag_3"] = lines[8]
+        if len(lines) > 9:
+            result["reg_flag_4"] = lines[9]
+        if len(lines) > 10:
+            result["reg_flag_5"] = lines[10]
+        if len(lines) > 11:
+            result["reg_flag_6"] = lines[11]
+        return result
+
     line = clean_html_text(raw).split("\n", 1)[0]
     parts = [p.strip() for p in re.split(r"[;,]", line) if p.strip()]
     setpoint = None
@@ -411,6 +607,7 @@ def parse_reg(raw: str) -> dict[str, Any]:
         "next_action": next_action,
         "status": status,
         "raw": raw,
+        "values": parts,
     }
 
 
