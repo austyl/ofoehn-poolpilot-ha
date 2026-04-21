@@ -31,9 +31,12 @@ class PowerSwitch(CoordinatorEntity, SwitchEntity):
     def is_on(self):
         idx = self.coordinator.data["indices"]["power_idx"]
         try:
-            return float(self.coordinator.data["super"].get(idx, 0)) > 0
+            value = self.coordinator.data["super"].get(idx)
+            if value is not None:
+                return float(value) > 0
         except (TypeError, ValueError):
-            return self.coordinator.data.get("power_on")
+            pass
+        return self.coordinator.data.get("power_on")
 
     async def async_turn_on(self, **kwargs):
         if not self.is_on:

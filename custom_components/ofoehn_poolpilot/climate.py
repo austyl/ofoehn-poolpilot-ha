@@ -44,10 +44,13 @@ class OFoehnClimate(CoordinatorEntity, ClimateEntity):
             fallback = self.coordinator.data.get("power_on")
             return True if fallback is None else fallback
         try:
-            return float(self.coordinator.data["super"].get(idx, 1)) > 0
+            value = self.coordinator.data["super"].get(idx)
+            if value is not None:
+                return float(value) > 0
         except Exception:
-            fallback = self.coordinator.data.get("power_on")
-            return True if fallback is None else fallback
+            pass
+        fallback = self.coordinator.data.get("power_on")
+        return True if fallback is None else fallback
 
     async def _power_on(self):
         if not self._is_power_on():

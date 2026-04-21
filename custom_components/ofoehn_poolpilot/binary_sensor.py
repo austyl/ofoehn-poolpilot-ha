@@ -66,10 +66,13 @@ class PumpBinarySensor(CoordinatorEntity, BinarySensorEntity):
             fallback = self.coordinator.data.get("pump_on")
             return False if fallback is None else fallback
         try:
-            return float(self.coordinator.data["super"].get(idx, 0)) > 0
+            value = self.coordinator.data["super"].get(idx)
+            if value is not None:
+                return float(value) > 0
         except (TypeError, ValueError):
-            fallback = self.coordinator.data.get("pump_on")
-            return False if fallback is None else fallback
+            pass
+        fallback = self.coordinator.data.get("pump_on")
+        return False if fallback is None else fallback
 
 
 class HeatingBinarySensor(CoordinatorEntity, BinarySensorEntity):
@@ -93,9 +96,12 @@ class HeatingBinarySensor(CoordinatorEntity, BinarySensorEntity):
                 or self.coordinator.data.get("compressor_2_on")
             )
         try:
-            return float(self.coordinator.data["super"].get(idx, 0)) > 0
+            value = self.coordinator.data["super"].get(idx)
+            if value is not None:
+                return float(value) > 0
         except (TypeError, ValueError):
-            return bool(
-                self.coordinator.data.get("compressor_1_on")
-                or self.coordinator.data.get("compressor_2_on")
-            )
+            pass
+        return bool(
+            self.coordinator.data.get("compressor_1_on")
+            or self.coordinator.data.get("compressor_2_on")
+        )
