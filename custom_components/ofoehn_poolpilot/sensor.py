@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from homeassistant.components.sensor import SensorEntity
-from homeassistant.const import UnitOfTemperature, UnitOfElectricPotential
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
+from homeassistant.const import UnitOfElectricPotential, UnitOfPressure, UnitOfTemperature
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -27,6 +27,35 @@ async def async_setup_entry(hass, entry, async_add_entities):
             RegTextSensor(coord, host, entry.entry_id, key="regulation", name="Régulation"),
             RegTextSensor(coord, host, entry.entry_id, key="next_action", name="Prochaine action"),
             RegTextSensor(coord, host, entry.entry_id, key="status", name="État général"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="firmware_version", name="Firmware"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="webuser_role", name="Rôle WebUser"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="ph_license", name="Licence pH"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="ev_present", name="Présence EV"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="ev_position", name="Position EV"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="balneo_state", name="Balnéo"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="contact_bp1", name="Contact BP1"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="contact_bp2", name="Contact BP2"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="contact_hp1", name="Contact HP1"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="contact_hp2", name="Contact HP2"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="power_state", name="État alimentation"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="pump_state", name="Relai pompe"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="fan_state", name="Relai ventilateur"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="valve_1_state", name="Relai vanne 1"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="compressor_1_state", name="Relai compresseur 1"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="valve_2_state", name="Relai vanne 2"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="compressor_2_state", name="Relai compresseur 2"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="chlorine_state", name="Chlore"),
+            DiagnosticTextSensor(coord, host, entry.entry_id, key="ph_state", name="pH"),
+            DiagnosticTemperatureSensor(coord, host, entry.entry_id, key="compressor_1_temp", name="Temp Compresseur 1"),
+            DiagnosticTemperatureSensor(coord, host, entry.entry_id, key="battery_1_temp", name="Temp Batterie 1"),
+            DiagnosticTemperatureSensor(coord, host, entry.entry_id, key="compressor_2_temp", name="Temp Compresseur 2"),
+            DiagnosticTemperatureSensor(coord, host, entry.entry_id, key="battery_2_temp", name="Temp Batterie 2"),
+            DiagnosticTemperatureSensor(coord, host, entry.entry_id, key="ext2_temp", name="Temp Sortie Échangeur"),
+            DiagnosticTemperatureSensor(coord, host, entry.entry_id, key="gas_temp", name="Temp Gaz"),
+            DiagnosticTemperatureSensor(coord, host, entry.entry_id, key="superheat", name="Surchauffe"),
+            DiagnosticTemperatureSensor(coord, host, entry.entry_id, key="delta", name="Delta Supervision"),
+            DiagnosticPressureSensor(coord, host, entry.entry_id, key="pressure_1", name="Pression 1"),
+            DiagnosticPressureSensor(coord, host, entry.entry_id, key="pressure_2", name="Pression 2"),
             RawSensor(coord, host, entry.entry_id, key="super_raw", name="Super Raw"),
             RawSensor(coord, host, entry.entry_id, key="accueil_raw", name="Accueil Raw"),
             RawSensor(coord, host, entry.entry_id, key="reg_raw", name="Reg Raw"),
@@ -98,6 +127,52 @@ class VoltageSensor(CoordinatorEntity, SensorEntity):
         return value
 
 
+class DiagnosticTemperatureSensor(CoordinatorEntity, SensorEntity):
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 1
+
+    def __init__(self, coordinator: OFoehnCoordinator, host: str, entry_id: str, key: str, name: str):
+        super().__init__(coordinator)
+        self._key = key
+        self._attr_name = f"O'Foehn {name}"
+        self._attr_unique_id = f"ofoehn_diag_{key}_{host}"
+        self._host = host
+
+    @property
+    def device_info(self):
+        return device_info_for_host(self._host)
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get(self._key)
+
+
+class DiagnosticPressureSensor(CoordinatorEntity, SensorEntity):
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.PRESSURE
+    _attr_native_unit_of_measurement = UnitOfPressure.KPA
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 1
+
+    def __init__(self, coordinator: OFoehnCoordinator, host: str, entry_id: str, key: str, name: str):
+        super().__init__(coordinator)
+        self._key = key
+        self._attr_name = f"O'Foehn {name}"
+        self._attr_unique_id = f"ofoehn_diag_{key}_{host}"
+        self._host = host
+
+    @property
+    def device_info(self):
+        return device_info_for_host(self._host)
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get(self._key)
+
+
 class SetpointDiffSensor(CoordinatorEntity, SensorEntity):
     _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
 
@@ -158,6 +233,25 @@ class RegTextSensor(CoordinatorEntity, SensorEntity):
             if fallback_value not in (None, "", "Inconnu"):
                 return fallback_value
         return value
+
+
+class DiagnosticTextSensor(CoordinatorEntity, SensorEntity):
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: OFoehnCoordinator, host: str, entry_id: str, key: str, name: str):
+        super().__init__(coordinator)
+        self._key = key
+        self._attr_name = f"O'Foehn {name}"
+        self._attr_unique_id = f"ofoehn_diag_{key}_{host}"
+        self._host = host
+
+    @property
+    def device_info(self):
+        return device_info_for_host(self._host)
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get(self._key)
 
 
 class RawSensor(CoordinatorEntity, SensorEntity):

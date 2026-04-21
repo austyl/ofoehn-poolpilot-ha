@@ -26,6 +26,7 @@ HTML_LINK_RE = re.compile(r"<a\b[^>]*>(.*?)</a>", re.IGNORECASE | re.DOTALL)
 WHITESPACE_RE = re.compile(r"\s+")
 DONNEE_RE = re.compile(r"DONNEE(\d+)=(-?\d+(?:[.,]\d+)?)")
 FLOAT_RE = re.compile(r"-?\d+(?:[.,]\d+)?")
+FIRMWARE_RE = re.compile(r"Version\s+V?([0-9.]+)", re.IGNORECASE)
 TEMP_PAIR_RE = re.compile(
     r"(-?\d+(?:[.,]\d+)?)\s*(?:°|&deg;)\s*C\s*\(\s*(-?\d+(?:[.,]\d+)?)\s*(?:°|&deg;)?\s*C?\s*\)",
     re.IGNORECASE,
@@ -89,6 +90,18 @@ def _is_enabled_text(value: str | None) -> bool | None:
     return None
 
 
+def parse_page_metadata(raw: str) -> dict[str, Any]:
+    """Extract metadata when a payload contains an HTML page."""
+    if not raw or "<html" not in raw.lower():
+        return {}
+
+    result: dict[str, Any] = {}
+    firmware_match = FIRMWARE_RE.search(raw)
+    if firmware_match:
+        result["firmware_version"] = f"V{firmware_match.group(1)}"
+    return result
+
+
 def parse_super_values(raw: str) -> dict[str, Any]:
     """Parse the line-oriented payload used by the supervision page."""
     if not raw or "<html" in raw.lower():
@@ -111,25 +124,54 @@ def parse_super_values(raw: str) -> dict[str, Any]:
             return None
         return _to_float(match.group(0))
 
+    webuser_type = text_at(22)
+    ev_raw = text_at(24)
+
     return {
+        "contact_bp1": text_at(0),
+        "contact_bp2": text_at(1),
+        "contact_hp1": text_at(2),
+        "contact_hp2": text_at(3),
+        "balneo_state": text_at(4),
         "water_in": float_at(5),
         "water_out": float_at(6),
         "air_temp": float_at(7),
+        "compressor_1_temp": float_at(8),
+        "battery_1_temp": float_at(9),
+        "compressor_2_temp": float_at(10),
+        "battery_2_temp": float_at(11),
         "pressure_1": float_at(12),
         "pressure_2": float_at(13),
+        "chlorine_state": text_at(14),
+        "ph_state": text_at(15),
         "pump_state": text_at(16),
         "pump_on": _is_enabled_text(text_at(16)),
         "fan_state": text_at(17),
+        "valve_1_state": text_at(18),
         "compressor_1_state": text_at(19),
         "compressor_1_on": _is_enabled_text(text_at(19)),
+        "valve_2_state": text_at(20),
         "compressor_2_state": text_at(21),
         "compressor_2_on": _is_enabled_text(text_at(21)),
+        "webuser_type": webuser_type,
+        "webuser_role": (
+            "Utilisateur"
+            if webuser_type == "0"
+            else "Installateur/Admin"
+            if webuser_type
+            else None
+        ),
         "power_state": text_at(23),
         "power_on": _is_enabled_text(text_at(23)),
+        "ev_present": (
+            "Oui" if ev_raw == "1" else "Non" if ev_raw is not None else None
+        ),
         "ext2_temp": float_at(25),
         "superheat": float_at(26),
+        "ev_position": text_at(27),
         "gas_temp": float_at(28),
         "delta": float_at(29),
+        "ph_license": text_at(30),
     }
 
 class OFoehnApi:
@@ -393,6 +435,10 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
         self.logger.debug("super_raw: %s", sup)
         self.logger.debug("accueil_raw: %s", acc)
         self.logger.debug("reg_raw: %s", reg)
+        page_metadata: dict[str, Any] = {}
+        for raw in (sup, acc, reg):
+            if not page_metadata:
+                page_metadata = parse_page_metadata(raw)
         parsed_super = parse_super_values(sup)
         parsed_accueil = parse_accueil_html(acc)
         return {
@@ -402,6 +448,7 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
             "super": parse_donnees(sup),
             "accueil": parse_donnees(acc),
             "reg": parse_reg(reg),
+            **page_metadata,
             **parsed_super,
             **parsed_accueil,
             "indices": {
