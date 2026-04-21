@@ -65,7 +65,7 @@ def _normalize_mode(value: str | None) -> str | None:
         return "FROID"
     if "AUTO" in upper:
         return "AUTO"
-    return text
+    return None
 
 
 def _extract_anchor_texts(raw: str) -> list[str]:
@@ -75,6 +75,62 @@ def _extract_anchor_texts(raw: str) -> list[str]:
         if text:
             values.append(text)
     return values
+
+
+def _is_enabled_text(value: str | None) -> bool | None:
+    text = clean_html_text(value)
+    if not text:
+        return None
+    upper = text.upper()
+    if upper in {"ON", "OK", "1"}:
+        return True
+    if upper in {"OFF", "0"}:
+        return False
+    return None
+
+
+def parse_super_values(raw: str) -> dict[str, Any]:
+    """Parse the line-oriented payload used by the supervision page."""
+    if not raw or "<html" in raw.lower():
+        return {}
+
+    lines = [clean_html_text(line) for line in raw.splitlines()]
+    lines = [line for line in lines if line]
+    if len(lines) < 24:
+        return {}
+
+    def text_at(index: int) -> str | None:
+        return lines[index] if index < len(lines) else None
+
+    def float_at(index: int) -> float | None:
+        value = text_at(index)
+        if not value:
+            return None
+        match = FLOAT_RE.search(value)
+        if not match:
+            return None
+        return _to_float(match.group(0))
+
+    return {
+        "water_in": float_at(5),
+        "water_out": float_at(6),
+        "air_temp": float_at(7),
+        "pressure_1": float_at(12),
+        "pressure_2": float_at(13),
+        "pump_state": text_at(16),
+        "pump_on": _is_enabled_text(text_at(16)),
+        "fan_state": text_at(17),
+        "compressor_1_state": text_at(19),
+        "compressor_1_on": _is_enabled_text(text_at(19)),
+        "compressor_2_state": text_at(21),
+        "compressor_2_on": _is_enabled_text(text_at(21)),
+        "power_state": text_at(23),
+        "power_on": _is_enabled_text(text_at(23)),
+        "ext2_temp": float_at(25),
+        "superheat": float_at(26),
+        "gas_temp": float_at(28),
+        "delta": float_at(29),
+    }
 
 class OFoehnApi:
     def __init__(
@@ -337,6 +393,7 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
         self.logger.debug("super_raw: %s", sup)
         self.logger.debug("accueil_raw: %s", acc)
         self.logger.debug("reg_raw: %s", reg)
+        parsed_super = parse_super_values(sup)
         parsed_accueil = parse_accueil_html(acc)
         return {
             "super_raw": sup,
@@ -345,6 +402,7 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
             "super": parse_donnees(sup),
             "accueil": parse_donnees(acc),
             "reg": parse_reg(reg),
+            **parsed_super,
             **parsed_accueil,
             "indices": {
                 "water_in_idx": self.options.get("water_in_idx", DEFAULT_INDEX["water_in_idx"]),

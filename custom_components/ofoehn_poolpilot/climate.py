@@ -41,11 +41,13 @@ class OFoehnClimate(CoordinatorEntity, ClimateEntity):
     def _is_power_on(self):
         idx = self.coordinator.data["indices"].get("power_idx")
         if idx is None:
-            return True
+            fallback = self.coordinator.data.get("power_on")
+            return True if fallback is None else fallback
         try:
             return float(self.coordinator.data["super"].get(idx, 1)) > 0
         except Exception:
-            return True
+            fallback = self.coordinator.data.get("power_on")
+            return True if fallback is None else fallback
 
     async def _power_on(self):
         if not self._is_power_on():
@@ -60,11 +62,17 @@ class OFoehnClimate(CoordinatorEntity, ClimateEntity):
     @property
     def current_temperature(self):
         idx = self.coordinator.data["indices"]["water_in_idx"]
-        return self.coordinator.data["super"].get(idx, self.coordinator.data.get("water_in"))
+        value = self.coordinator.data["super"].get(idx)
+        if value is not None:
+            return value
+        return self.coordinator.data.get("water_in")
 
     @property
     def target_temperature(self):
-        return self.coordinator.data["reg"].get("setpoint", self.coordinator.data.get("setpoint"))
+        value = self.coordinator.data["reg"].get("setpoint")
+        if value is not None:
+            return value
+        return self.coordinator.data.get("setpoint")
 
     @property
     def hvac_mode(self):
