@@ -6,7 +6,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import OFoehnCoordinator
+from .coordinator import OFoehnCoordinator, clean_html_text
 from .helpers import device_info_for_host
 
 
@@ -136,7 +136,28 @@ class RegTextSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self):
-        return self.coordinator.data.get("reg", {}).get(self._key)
+        reg_data = self.coordinator.data.get("reg", {})
+        value = reg_data.get(self._key)
+        if self._key == "mode":
+            fallback_mode = self.coordinator.data.get("mode")
+            reg_raw = clean_html_text(self.coordinator.data.get("reg_raw"))
+            if fallback_mode and (value is None or (value == "AUTO" and "AUTO" not in reg_raw.upper())):
+                return fallback_mode
+            return value or fallback_mode
+
+        if value not in (None, "", "Inconnu"):
+            return value
+
+        fallback_keys = {
+            "regulation": ("reg_mode",),
+            "next_action": ("next_action",),
+            "status": ("general_state",),
+        }
+        for fallback_key in fallback_keys.get(self._key, ()):
+            fallback_value = self.coordinator.data.get(fallback_key)
+            if fallback_value not in (None, "", "Inconnu"):
+                return fallback_value
+        return value
 
 
 class RawSensor(CoordinatorEntity, SensorEntity):
@@ -156,7 +177,8 @@ class RawSensor(CoordinatorEntity, SensorEntity):
     @property
     def native_value(self):
         value = self.coordinator.data.get(self._key)
-        self._attr_extra_state_attributes = {"raw": value}
+        preview = clean_html_text(value)
+        self._attr_extra_state_attributes = {"raw": value, "plain_text": preview}
         if value is None:
             return None
-        return value[:255]
+        return (preview or value)[:255]

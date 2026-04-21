@@ -60,21 +60,30 @@ class OFoehnClimate(CoordinatorEntity, ClimateEntity):
     @property
     def current_temperature(self):
         idx = self.coordinator.data["indices"]["water_in_idx"]
-        return self.coordinator.data["super"].get(idx)
+        return self.coordinator.data["super"].get(idx, self.coordinator.data.get("water_in"))
 
     @property
     def target_temperature(self):
-        return self.coordinator.data["reg"].get("setpoint")
+        return self.coordinator.data["reg"].get("setpoint", self.coordinator.data.get("setpoint"))
 
     @property
     def hvac_mode(self):
         if not self._is_power_on():
             return HVACMode.OFF
-        mode = self.coordinator.data["reg"].get("mode", "AUTO")
+        reg_mode = self.coordinator.data["reg"].get("mode")
+        accueil_mode = self.coordinator.data.get("mode")
+        reg_raw = (self.coordinator.data.get("reg_raw") or "").upper()
+        mode = reg_mode
+        if accueil_mode and (mode is None or (mode == "AUTO" and "AUTO" not in reg_raw)):
+            mode = accueil_mode
+        if mode is None:
+            mode = "AUTO"
         if mode == "CHAUD":
             return HVACMode.HEAT
         if mode == "FROID":
             return HVACMode.COOL
+        if mode == "OFF":
+            return HVACMode.OFF
         return HVACMode.AUTO
 
     async def async_set_temperature(self, **kwargs):

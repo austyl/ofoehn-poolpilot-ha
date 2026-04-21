@@ -21,6 +21,61 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+HTML_TAG_RE = re.compile(r"<[^>]+>")
+HTML_LINK_RE = re.compile(r"<a\b[^>]*>(.*?)</a>", re.IGNORECASE | re.DOTALL)
+WHITESPACE_RE = re.compile(r"\s+")
+DONNEE_RE = re.compile(r"DONNEE(\d+)=(-?\d+(?:[.,]\d+)?)")
+FLOAT_RE = re.compile(r"-?\d+(?:[.,]\d+)?")
+TEMP_PAIR_RE = re.compile(
+    r"(-?\d+(?:[.,]\d+)?)\s*(?:°|&deg;)\s*C\s*\(\s*(-?\d+(?:[.,]\d+)?)\s*(?:°|&deg;)?\s*C?\s*\)",
+    re.IGNORECASE,
+)
+
+
+def clean_html_text(raw: str | None) -> str:
+    """Convert device HTML-ish payloads to readable plain text."""
+    if not raw:
+        return ""
+    text = html.unescape(raw)
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = HTML_TAG_RE.sub(" ", text)
+    text = text.replace("\xa0", " ")
+    return WHITESPACE_RE.sub(" ", text).strip()
+
+
+def _to_float(value: str | None) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value.replace(",", "."))
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def _normalize_mode(value: str | None) -> str | None:
+    text = clean_html_text(value)
+    if not text:
+        return None
+    upper = text.upper()
+    if "OFF" in upper:
+        return "OFF"
+    if "CHAUD" in upper:
+        return "CHAUD"
+    if "FROID" in upper:
+        return "FROID"
+    if "AUTO" in upper:
+        return "AUTO"
+    return text
+
+
+def _extract_anchor_texts(raw: str) -> list[str]:
+    values: list[str] = []
+    for match in HTML_LINK_RE.finditer(raw or ""):
+        text = clean_html_text(match.group(1))
+        if text:
+            values.append(text)
+    return values
+
 class OFoehnApi:
     def __init__(
         self,
@@ -146,43 +201,74 @@ class OFoehnApi:
 
 
 def parse_accueil_html(raw: str) -> dict[str, Any]:
-    raw = html.unescape(raw)
+    plain = clean_html_text(raw)
     result: dict[str, Any] = {}
 
     patterns = {
-        "mode": r"Mode\s*:\s*([^<]+)",
-        "reg_mode": r"Mode de régulation\s*:\s*([^<]+)",
-        "pump": r"Pompe\s*:\s*([^<]+)",
-        "heat": r"Chauffage\s*:\s*([^<]+)",
-        "next_action": r"Prochaine action\s*:\s*([^<]+)",
-        "general_state": r"État général\s*:\s*([^<]+)",
-        "delta_setpoint": r"Écart consigne\s*:\s*([0-9.,]+)",
-        "air_temp": r"Température air\s*:\s*([0-9.,]+)",
-        "voltage": r"Tension\s*:\s*([0-9.,]+)",
-        "internal_temp": r"Température interne\s*:\s*([0-9.,]+)",
-        "clock": r"Horloge\s*:\s*([^<]+)",
+        "mode": r"\bMode\s*:\s*(.+?)(?=\s+Mode de régulation\s*:|\s+Pompe\s*:|\s+Prochaine action\s*:|\s+État général\s*:|\s+Etat général\s*:|$)",
+        "reg_mode": r"\b(?:Mode de régulation|Régulation)\s*:\s*(.+?)(?=\s+Pompe\s*:|\s+Prochaine action\s*:|\s+État général\s*:|\s+Etat général\s*:|$)",
+        "pump": r"\bPompe\s*:\s*(.+?)(?=\s+Chauffage\s*:|\s+Prochaine action\s*:|\s+État général\s*:|\s+Etat général\s*:|$)",
+        "heat": r"\bChauffage\s*:\s*(.+?)(?=\s+Prochaine action\s*:|\s+État général\s*:|\s+Etat général\s*:|$)",
+        "next_action": r"\bProchaine action\s*:\s*(.+?)(?=\s+État général\s*:|\s+Etat général\s*:|\s+Température air\s*:|\s+Tension\s*:|\s+Horloge\s*:|$)",
+        "general_state": r"\b(?:État général|Etat général)\s*:\s*(.+?)(?=\s+Température air\s*:|\s+Tension\s*:|\s+Horloge\s*:|$)",
+        "delta_setpoint": r"\bÉcart consigne\s*:\s*(-?[0-9.,]+)",
+        "air_temp": r"\bTempérature air\s*:\s*(-?[0-9.,]+)",
+        "voltage": r"\bTension\s*:\s*(-?[0-9.,]+)",
+        "internal_temp": r"\bTempérature interne\s*:\s*(-?[0-9.,]+)",
+        "clock": r"\bHorloge\s*:\s*(.+)$",
     }
 
     for key, pattern in patterns.items():
-        m = re.search(pattern, raw, re.IGNORECASE)
+        m = re.search(pattern, plain, re.IGNORECASE)
         if not m:
             continue
         value = m.group(1).strip()
         if key in {"delta_setpoint", "air_temp", "voltage", "internal_temp"}:
             try:
-                result[key] = float(value.replace(',', '.'))
-            except Exception:
+                result[key] = float(value.replace(",", "."))
+            except (TypeError, ValueError):
                 _LOGGER.debug("Error parsing %s from accueil HTML: %s", key, value)
         else:
             result[key] = value
 
-    match = re.search(r"Chaud\s+([\d.,]+)°C.*?\(([\d.,]+)°C\)", raw, re.IGNORECASE)
+    if not result.get("mode"):
+        result["mode"] = _normalize_mode(plain)
+
+    anchor_texts = _extract_anchor_texts(raw)
+    if anchor_texts:
+        if not result.get("mode"):
+            for value in anchor_texts:
+                normalized_mode = _normalize_mode(value)
+                if normalized_mode in {"CHAUD", "FROID", "AUTO", "OFF"}:
+                    result["mode"] = normalized_mode
+                    break
+        if not result.get("reg_mode") and len(anchor_texts) > 1:
+            result["reg_mode"] = anchor_texts[1]
+
+    match = TEMP_PAIR_RE.search(raw) or TEMP_PAIR_RE.search(plain)
     if match:
-        try:
-            result["water_in"] = float(match.group(1).replace(',', '.'))
-            result["setpoint"] = float(match.group(2).replace(',', '.'))
-        except Exception:
+        water_in = _to_float(match.group(1))
+        setpoint = _to_float(match.group(2))
+        if water_in is not None:
+            result["water_in"] = water_in
+        if setpoint is not None:
+            result["setpoint"] = setpoint
+        if water_in is None or setpoint is None:
             _LOGGER.debug("Error parsing water values from accueil HTML: %s", raw)
+
+    if not result.get("general_state"):
+        state_matches = re.findall(r"\b(ON|OFF)\b", plain, re.IGNORECASE)
+        if state_matches:
+            result["general_state"] = state_matches[-1].upper()
+
+    if not result.get("next_action"):
+        next_action_match = re.search(
+            r"\b(Aucune|Aucun|Arrêté|Arrete|Arrêt|Arret|Non \(Automne\))\b",
+            plain,
+            re.IGNORECASE,
+        )
+        if next_action_match:
+            result["next_action"] = next_action_match.group(1)
 
     if not result:
         _LOGGER.debug("Failed to parse accueil HTML: %s", raw)
@@ -191,10 +277,10 @@ def parse_accueil_html(raw: str) -> dict[str, Any]:
 
 def parse_donnees(raw: str) -> dict[int, float]:
     out: dict[int, float] = {}
-    for m in re.finditer(r"DONNEE(\d+)=([0-9.]+)", raw):
+    for m in DONNEE_RE.finditer(raw):
         try:
-            out[int(m.group(1))] = float(m.group(2))
-        except Exception:
+            out[int(m.group(1))] = float(m.group(2).replace(",", "."))
+        except (TypeError, ValueError):
             _LOGGER.debug("Error parsing donnees entry: %s", m.group(0))
             continue
     if not out:
@@ -203,23 +289,20 @@ def parse_donnees(raw: str) -> dict[int, float]:
 
 
 def parse_reg(raw: str) -> dict[str, Any]:
-    line = raw.split("\n", 1)[0]
-    parts = [p.strip() for p in line.split(",")]
+    line = clean_html_text(raw).split("\n", 1)[0]
+    parts = [p.strip() for p in re.split(r"[;,]", line) if p.strip()]
     setpoint = None
     if parts:
-        try:
-            setpoint = float(parts[0])
-        except Exception:
+        setpoint = _to_float(parts[0])
+        if setpoint is None and FLOAT_RE.match(parts[0]):
             _LOGGER.debug("Failed to parse setpoint from reg: %s", raw)
-    mode = "AUTO"
+
+    mode = None
     if len(parts) > 1:
-        p1 = parts[1].upper()
-        if "CHAUD" in p1:
-            mode = "CHAUD"
-        elif "FROID" in p1:
-            mode = "FROID"
-    else:
-        _LOGGER.debug("Failed to determine mode from reg: %s", raw)
+        mode = _normalize_mode(parts[1])
+    if mode is None:
+        mode = _normalize_mode(line)
+
     regulation = parts[2] if len(parts) > 2 else None
     next_action = parts[3] if len(parts) > 3 else None
     status = parts[4] if len(parts) > 4 else None
