@@ -2,8 +2,8 @@
   "domain": "ofoehn_poolpilot",
   "name": "O'Foehn PoolPilot",
   "version": "0.2.2",
-  "documentation": "https://github.com/jfbrassens/ofoehn-poolpilot-ha",
-  "issue_tracker": "https://github.com/jfbrassens/ofoehn-poolpilot-ha/issues",
+  "documentation": "https://github.com/austyl/ofoehn-poolpilot-ha",
+  "issue_tracker": "https://github.com/austyl/ofoehn-poolpilot-ha/issues",
   "requirements": [],
   "codeowners": [
     "@jfbrassens"
