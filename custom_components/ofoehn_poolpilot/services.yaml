@@ -1,1 +1,6 @@
 # Optional custom services
+
+check_connection:
+  name: Check connection
+  description: Perform a lightweight request to verify connectivity with the PoolPilot device.
+

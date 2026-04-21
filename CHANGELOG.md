@@ -1,11 +1,8 @@
 # Changelog
 
-## Unreleased
-- Validation de connexion dans le Config Flow et blocage des doublons
-- Auth `COOKIE` optimisée pour éviter les relogins inutiles
-- Parsing renforcé pour les valeurs négatives et formats décimaux
-- Option d'intervalle de rafraîchissement ajoutée
-- Métadonnées d'entités Home Assistant améliorées
+## v0.2.2 — HTML Fallback
+- Parse water temperature, air temperature, voltage and internal temperature from
+  the `/accueil` HTML when numeric indices are missing.
 
 ## v0.2.1 — Auth & Examples
 - Authentification: NONE/BASIC/QUERY/COOKIE

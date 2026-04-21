@@ -1,11 +1,8 @@
 DOMAIN = "ofoehn_poolpilot"
-DEFAULT_NAME = "O'Foehn PoolPilot"
 DEFAULT_PORT = 80
-PLATFORMS = ("climate", "sensor", "switch")
+DEFAULT_TIMEOUT = 10  # seconds
+PLATFORMS = ["climate", "sensor", "switch", "binary_sensor"]
 SCAN_INTERVAL = 30  # seconds
-MIN_SCAN_INTERVAL = 5
-MAX_SCAN_INTERVAL = 300
-CONF_SCAN_INTERVAL = "scan_interval"
 
 # Auth modes
 AUTH_NONE = "none"
@@ -27,6 +24,10 @@ DEFAULT_INDEX = {
     "water_in_idx": 5,
     "water_out_idx": 6,
     "air_idx": 7,
+    "voltage_idx": 8,
+    "internal_idx": 9,
+    "pump_idx": 10,
+    "heating_idx": 11,
     "light_idx": 16,  # accueil.cgi souvent
-    "power_idx": 24,  # état alim (selon firmware)
+    "power_idx": 24   # état alim (selon firmware)
 }

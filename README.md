@@ -12,8 +12,9 @@ Version **v0.2.1** — Ajout de l'**authentification**: NONE / BASIC / QUERY / C
 ## ✨ Fonctionnalités
 - Entité **Climate** (OFF/AUTO/CHAUD/FROID, consigne pas de 0,5 °C)
 - Capteurs : **Eau In / Eau Out / Air**
+- Capteurs *Raw* : **Super / Accueil / Reg** (valeur affichée limitée à 255 caractères, réponse complète dans l'attribut `raw`)
 - Switchs : **PAC – Alimentation** & **Éclairage**
-- **Config Flow** avec test de connexion, prévention des doublons et options avancées
+- **Config Flow** (IP/Port + Auth)
 - Exemples Lovelace (`examples/`)
 
 ## 🔐 Authentification
@@ -22,10 +23,9 @@ Version **v0.2.1** — Ajout de l'**authentification**: NONE / BASIC / QUERY / C
 - **QUERY** : identifiants injectés en **query string** et payloads
 - **COOKIE** : login sur `login_path` (POST par défaut), cookies réutilisés, relogin auto sur 401/403
 
-## ⚙️ Options avancées
+## ⚙️ Indices DONNEE# (par défaut)
 - Eau In `5`, Eau Out `6`, Air `7`, Lumière `16`, Alimentation `24`.  
 Personnalisables via **Options**.
-- Intervalle de rafraîchissement ajustable de `5` à `300` secondes.
 
 ## 🚀 Installation via HACS
 1. HACS → Dépôts personnalisés → Ajouter cet entrepôt (catégorie **Intégration**)
@@ -37,3 +37,26 @@ Voir `examples/` (full et compact) : jauges Eau In/Out/Air, carte Thermostat, hi
 
 ## 🛡️ Sécurité
 HTTP en clair : isolez la PAC (VLAN/IoT). Évitez le mode `QUERY` si possible (identifiants dans l'URL).
+
+## 🐞 Debug / Regex
+Activer les logs détaillés dans `configuration.yaml` :
+
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.ofoehn_poolpilot: debug
+```
+
+Une fois activée, la réponse complète est disponible dans l'attribut `raw` et également enregistrée dans les logs.
+
+Exemples de regex :
+
+- Température d'eau : `r"DONNEE5=([0-9.]+)"` (indice `5` par défaut pour `Eau In`, à adapter selon votre configuration).
+- Consigne : `r"^([0-9.]+),"` (première valeur renvoyée par `getReg.cgi`).
+
+## 🛠️ Développement
+Ce projet utilise [pre-commit](https://pre-commit.com) pour lancer [ruff](https://docs.astral.sh/ruff/) et [mypy](https://mypy.readthedocs.io/) ainsi que vérifier les fins de fichier.
+
+1. Installer les dépendances : `pip install pre-commit`
+2. Exécuter les hooks : `pre-commit run --all-files`
