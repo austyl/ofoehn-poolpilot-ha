@@ -1,20 +1,20 @@
 {
   "domain": "ofoehn_poolpilot",
   "name": "O'Foehn PoolPilot",
-  "version": "0.2.2",
-  "documentation": "https://github.com/austyl/ofoehn-poolpilot-ha",
-  "issue_tracker": "https://github.com/austyl/ofoehn-poolpilot-ha/issues",
-  "requirements": [],
-  "dependencies": [
-    "network"
-  ],
   "codeowners": [
     "@jfbrassens"
   ],
-  "iot_class": "local_polling",
-  "integration_type": "device",
   "config_flow": true,
+  "dependencies": [
+    "network"
+  ],
+  "documentation": "https://github.com/austyl/ofoehn-poolpilot-ha",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/austyl/ofoehn-poolpilot-ha/issues",
   "loggers": [
     "custom_components.ofoehn_poolpilot"
-  ]
+  ],
+  "requirements": [],
+  "version": "0.2.2"
 }
