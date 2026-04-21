@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
 import re
 from datetime import timedelta
 from typing import Any, Optional
 
-from aiohttp import BasicAuth, ClientResponseError, ClientSession
+from aiohttp import BasicAuth, ClientError, ClientResponseError, ClientSession
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from .const import (
     AUTH_BASIC,
     AUTH_COOKIE,
@@ -61,6 +62,10 @@ TEMP_PAIR_RE = re.compile(
     r"(-?\d+(?:[.,]\d+)?)\s*(?:°|&deg;)\s*C\s*\(\s*(-?\d+(?:[.,]\d+)?)\s*(?:°|&deg;)?\s*C?\s*\)",
     re.IGNORECASE,
 )
+
+READ_RETRIES = 2
+READ_RETRY_DELAY = 0.75
+INTER_REQUEST_DELAY = 0.25
 
 
 def clean_html_text(raw: str | None) -> str:
@@ -316,6 +321,7 @@ class OFoehnApi:
         self._pass_field = pass_field
         self._basic_auth = BasicAuth(username, password) if (auth_mode == AUTH_BASIC and username) else None
         self._timeout = timeout
+        self._cookie_logged_in = False
 
     def _url(self, path: str, query: dict[str, Any] | None = None) -> str:
         url = self._base + path
@@ -332,62 +338,110 @@ class OFoehnApi:
             url = url + sep + urlencode(query)
         return url
 
-    async def _maybe_login(self) -> None:
+    async def _maybe_login(self, *, force: bool = False) -> None:
         if self._auth_mode != AUTH_COOKIE:
+            return
+        if self._cookie_logged_in and not force:
             return
         data = {self._user_field: self._username or "", self._pass_field: self._password or ""}
         url = self._base + self._login_path
-        if self._login_method == "GET":
-            async with self._session.get(url, params=data, timeout=self._timeout) as resp:
-                resp.raise_for_status()
-        else:
-            async with self._session.post(url, data=data, timeout=self._timeout) as resp:
-                resp.raise_for_status()
-
-    async def _fetch(self, method: str, path: str, *, data: Any | None = None, query: dict[str, Any] | None = None) -> str:
-        url = self._url(path, query=query)
         try:
-            if method == "GET":
-                async with self._session.get(url, timeout=self._timeout, auth=self._basic_auth) as resp:
+            if self._login_method == "GET":
+                async with self._session.get(url, params=data, timeout=self._timeout) as resp:
                     resp.raise_for_status()
-                    return await resp.text()
             else:
+                async with self._session.post(url, data=data, timeout=self._timeout) as resp:
+                    resp.raise_for_status()
+        except Exception:
+            self._cookie_logged_in = False
+            raise
+        self._cookie_logged_in = True
+
+    async def _fetch(
+        self,
+        method: str,
+        path: str,
+        *,
+        data: Any | None = None,
+        query: dict[str, Any] | None = None,
+        retries: int = 0,
+    ) -> str:
+        url = self._url(path, query=query)
+        auth_retry_done = False
+        attempt = 0
+
+        while attempt <= retries:
+            try:
+                if method == "GET":
+                    async with self._session.get(url, timeout=self._timeout, auth=self._basic_auth) as resp:
+                        resp.raise_for_status()
+                        return await resp.text()
+
+                payload = data
                 if self._auth_mode == AUTH_QUERY and self._username and self._password:
-                    if isinstance(data, dict) or data is None:
-                        data = data.copy() if data else {}
-                        data[self._user_field] = self._username
-                        data[self._pass_field] = self._password
-                async with self._session.post(url, data=data or {}, timeout=self._timeout, auth=self._basic_auth) as resp:
+                    if isinstance(payload, dict) or payload is None:
+                        payload = payload.copy() if payload else {}
+                        payload[self._user_field] = self._username
+                        payload[self._pass_field] = self._password
+                async with self._session.post(
+                    url,
+                    data=payload or {},
+                    timeout=self._timeout,
+                    auth=self._basic_auth,
+                ) as resp:
                     resp.raise_for_status()
                     return await resp.text()
-        except ClientResponseError as e:
-            if e.status in (401, 403) and self._auth_mode == AUTH_COOKIE:
-                await self._maybe_login()
-                if method == "GET":
-                    async with self._session.get(url, timeout=self._timeout) as resp2:
-                        resp2.raise_for_status()
-                        return await resp2.text()
-                else:
-                    async with self._session.post(url, data=data or {}, timeout=self._timeout) as resp2:
-                        resp2.raise_for_status()
-                        return await resp2.text()
-            raise
+            except ClientResponseError as err:
+                if err.status in (401, 403) and self._auth_mode == AUTH_COOKIE and not auth_retry_done:
+                    self._cookie_logged_in = False
+                    await self._maybe_login(force=True)
+                    auth_retry_done = True
+                    continue
+                if method != "GET" or attempt >= retries:
+                    raise
+                attempt += 1
+                delay = READ_RETRY_DELAY * attempt
+                _LOGGER.warning(
+                    "Read %s failed with HTTP %s, retrying in %.2fs (%s/%s)",
+                    path,
+                    err.status,
+                    delay,
+                    attempt,
+                    retries,
+                )
+                await asyncio.sleep(delay)
+            except (ClientError, asyncio.TimeoutError, OSError) as err:
+                if method != "GET" or attempt >= retries:
+                    raise
+                attempt += 1
+                delay = READ_RETRY_DELAY * attempt
+                _LOGGER.warning(
+                    "Read %s failed (%s), retrying in %.2fs (%s/%s)",
+                    path,
+                    err,
+                    delay,
+                    attempt,
+                    retries,
+                )
+                await asyncio.sleep(delay)
+
+        raise UpdateFailed(f"Unable to read {path}")
 
     # Reads
     async def read_super(self) -> str:
         if self._auth_mode == AUTH_COOKIE:
             await self._maybe_login()
-        return await self._fetch("GET", ENDPOINTS["super"])
+        return await self._fetch("GET", ENDPOINTS["super"], retries=READ_RETRIES)
 
     async def read_accueil(self) -> str:
         if self._auth_mode == AUTH_COOKIE:
             await self._maybe_login()
-        return await self._fetch("GET", ENDPOINTS["accueil"])
+        return await self._fetch("GET", ENDPOINTS["accueil"], retries=READ_RETRIES)
 
     async def read_reg(self) -> str:
         if self._auth_mode == AUTH_COOKIE:
             await self._maybe_login()
-        return await self._fetch("GET", ENDPOINTS["reg_get"])
+        return await self._fetch("GET", ENDPOINTS["reg_get"], retries=READ_RETRIES)
 
     # Writes
     async def set_mode(self, mode: str) -> None:
@@ -625,10 +679,67 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
         self.api = api
         self.options = options or {}
 
+    def _build_indices(self) -> dict[str, int]:
+        return {
+            "water_in_idx": self.options.get("water_in_idx", DEFAULT_INDEX["water_in_idx"]),
+            "water_out_idx": self.options.get("water_out_idx", DEFAULT_INDEX["water_out_idx"]),
+            "air_idx": self.options.get("air_idx", DEFAULT_INDEX["air_idx"]),
+            "voltage_idx": self.options.get("voltage_idx", DEFAULT_INDEX["voltage_idx"]),
+            "internal_idx": self.options.get("internal_idx", DEFAULT_INDEX["internal_idx"]),
+            "pump_idx": self.options.get("pump_idx", DEFAULT_INDEX["pump_idx"]),
+            "heating_idx": self.options.get("heating_idx", DEFAULT_INDEX["heating_idx"]),
+            "light_idx": self.options.get("light_idx", DEFAULT_INDEX["light_idx"]),
+            "power_idx": self.options.get("power_idx", DEFAULT_INDEX["power_idx"]),
+        }
+
+    async def _read_with_fallback(
+        self,
+        *,
+        name: str,
+        reader,
+        previous_raw: str | None,
+        required: bool = False,
+    ) -> tuple[str, bool, str | None]:
+        try:
+            return await reader(), False, None
+        except Exception as err:
+            if previous_raw:
+                self.logger.warning(
+                    "Read %s failed, reusing the last valid payload: %s",
+                    name,
+                    err,
+                )
+                return previous_raw, True, str(err)
+            if required:
+                raise UpdateFailed(f"Unable to refresh {name}: {err}") from err
+            self.logger.warning(
+                "Read %s failed with no cached payload available: %s",
+                name,
+                err,
+            )
+            return "", True, str(err)
+
     async def _async_update_data(self) -> dict:
-        sup = await self.api.read_super()
-        acc = await self.api.read_accueil()
-        reg = await self.api.read_reg()
+        previous = self.data if isinstance(self.data, dict) else {}
+
+        sup, sup_stale, sup_error = await self._read_with_fallback(
+            name="super.cgi",
+            reader=self.api.read_super,
+            previous_raw=previous.get("super_raw"),
+            required=True,
+        )
+        await asyncio.sleep(INTER_REQUEST_DELAY)
+        acc, acc_stale, acc_error = await self._read_with_fallback(
+            name="accueil.cgi",
+            reader=self.api.read_accueil,
+            previous_raw=previous.get("accueil_raw"),
+        )
+        await asyncio.sleep(INTER_REQUEST_DELAY)
+        reg, reg_stale, reg_error = await self._read_with_fallback(
+            name="getReg.cgi",
+            reader=self.api.read_reg,
+            previous_raw=previous.get("reg_raw"),
+        )
         self.logger.debug("super_raw: %s", sup)
         self.logger.debug("accueil_raw: %s", acc)
         self.logger.debug("reg_raw: %s", reg)
@@ -639,24 +750,21 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
         parsed_super = parse_super_values(sup)
         parsed_accueil = parse_accueil_html(acc)
         return {
+            **previous,
             "super_raw": sup,
             "accueil_raw": acc,
             "reg_raw": reg,
             "super": parse_donnees(sup),
             "accueil": parse_donnees(acc),
             "reg": parse_reg(reg),
+            "super_stale": sup_stale,
+            "accueil_stale": acc_stale,
+            "reg_stale": reg_stale,
+            "super_error": sup_error,
+            "accueil_error": acc_error,
+            "reg_error": reg_error,
             **page_metadata,
             **parsed_super,
             **parsed_accueil,
-            "indices": {
-                "water_in_idx": self.options.get("water_in_idx", DEFAULT_INDEX["water_in_idx"]),
-                "water_out_idx": self.options.get("water_out_idx", DEFAULT_INDEX["water_out_idx"]),
-                "air_idx": self.options.get("air_idx", DEFAULT_INDEX["air_idx"]),
-                "voltage_idx": self.options.get("voltage_idx", DEFAULT_INDEX["voltage_idx"]),
-                "internal_idx": self.options.get("internal_idx", DEFAULT_INDEX["internal_idx"]),
-                "pump_idx": self.options.get("pump_idx", DEFAULT_INDEX["pump_idx"]),
-                "heating_idx": self.options.get("heating_idx", DEFAULT_INDEX["heating_idx"]),
-                "light_idx": self.options.get("light_idx", DEFAULT_INDEX["light_idx"]),
-                "power_idx": self.options.get("power_idx", DEFAULT_INDEX["power_idx"]),
-            }
+            "indices": self._build_indices(),
         }
