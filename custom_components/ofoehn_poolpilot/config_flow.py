@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import asyncio
+from ipaddress import ip_address, ip_network
+from typing import Any
+
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.components import network
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .coordinator import OFoehnApi, parse_donnees
+from .coordinator import OFoehnApi, parse_accueil_html, parse_donnees, parse_super_values
 
 from .const import (
     DOMAIN,
@@ -19,31 +25,159 @@ from .const import (
 )
 
 AUTH_OPTIONS = [AUTH_NONE, AUTH_BASIC, AUTH_QUERY, AUTH_COOKIE]
+DISCOVERY_TIMEOUT = 1
+DISCOVERY_CONCURRENCY = 32
+DISCOVERY_FALLBACK_PREFIX = 24
+DISCOVERY_MAX_HOSTS = 256
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
+    def __init__(self) -> None:
+        self._detected_hosts: list[str] = []
+
+    def _build_user_schema(self, defaults: dict[str, Any] | None = None) -> vol.Schema:
+        defaults = defaults or {}
+        return vol.Schema(
+            {
+                vol.Required(CONF_HOST, default=defaults.get(CONF_HOST, "")): str,
+                vol.Optional(CONF_PORT, default=defaults.get(CONF_PORT, DEFAULT_PORT)): int,
+                vol.Optional("auth_mode", default=defaults.get("auth_mode", AUTH_NONE)): vol.In(AUTH_OPTIONS),
+                vol.Optional(CONF_USERNAME, default=defaults.get(CONF_USERNAME, "")): str,
+                vol.Optional(CONF_PASSWORD, default=defaults.get(CONF_PASSWORD, "")): str,
+                vol.Optional("login_path", default=defaults.get("login_path", "/login.cgi")): str,
+                vol.Optional("login_method", default=defaults.get("login_method", "POST")): vol.In(["GET", "POST"]),
+                vol.Optional("user_field", default=defaults.get("user_field", "user")): str,
+                vol.Optional("pass_field", default=defaults.get("pass_field", "pass")): str,
+                vol.Optional("timeout", default=defaults.get("timeout", DEFAULT_TIMEOUT)): int,
+            }
+        )
+
+    async def _async_validate_input(self, user_input: dict[str, Any]) -> dict[str, Any]:
+        session = async_get_clientsession(self.hass)
+        api = OFoehnApi(
+            host=user_input[CONF_HOST],
+            port=user_input.get(CONF_PORT, DEFAULT_PORT),
+            session=session,
+            auth_mode=user_input.get("auth_mode", AUTH_NONE),
+            username=user_input.get(CONF_USERNAME),
+            password=user_input.get(CONF_PASSWORD),
+            login_path=user_input.get("login_path", "/login.cgi"),
+            login_method=user_input.get("login_method", "POST"),
+            user_field=user_input.get("user_field", "user"),
+            pass_field=user_input.get("pass_field", "pass"),
+            timeout=user_input.get("timeout", DEFAULT_TIMEOUT),
+        )
+
+        raw_super = await api.read_super()
+        raw_accueil = await api.read_accueil()
+
+        parsed_super = parse_super_values(raw_super)
+        parsed_accueil = parse_accueil_html(raw_accueil)
+        if not parsed_super and not parsed_accueil:
+            raise ValueError("Not an O'Foehn payload")
+
+        return {
+            "serial_number": parsed_accueil.get("serial_number"),
+            "mac_address": parsed_accueil.get("mac_address"),
+            "module_name": parsed_accueil.get("module_name"),
+        }
+
+    async def _async_probe_host(self, host: str, port: int) -> str | None:
+        session = async_get_clientsession(self.hass)
+        api = OFoehnApi(
+            host=host,
+            port=port,
+            session=session,
+            timeout=DISCOVERY_TIMEOUT,
+        )
+        try:
+            raw_accueil = await api.read_accueil()
+        except Exception:
+            return None
+
+        parsed = parse_accueil_html(raw_accueil)
+        if parsed.get("serial_number") or parsed.get("module_name") or parsed.get("mode"):
+            return host
+        return None
+
+    async def _async_discover_hosts(self, port: int) -> list[str]:
+        adapters = await network.async_get_adapters(self.hass)
+        candidates: list[str] = []
+        seen: set[str] = set()
+
+        for adapter in adapters:
+            for ipv4 in adapter.get("ipv4", []):
+                local_ip = ip_address(ipv4["address"])
+                if local_ip.is_loopback or local_ip.is_link_local or not local_ip.is_private:
+                    continue
+
+                prefix = ipv4["network_prefix"]
+                if prefix < DISCOVERY_FALLBACK_PREFIX:
+                    scan_network = ip_network(f"{local_ip}/{DISCOVERY_FALLBACK_PREFIX}", strict=False)
+                else:
+                    scan_network = ip_network(f"{local_ip}/{prefix}", strict=False)
+
+                if scan_network.num_addresses > DISCOVERY_MAX_HOSTS:
+                    scan_network = ip_network(f"{local_ip}/{DISCOVERY_FALLBACK_PREFIX}", strict=False)
+
+                for candidate in scan_network.hosts():
+                    host = str(candidate)
+                    if candidate == local_ip or host in seen:
+                        continue
+                    seen.add(host)
+                    candidates.append(host)
+
+        if not candidates:
+            return []
+
+        semaphore = asyncio.Semaphore(DISCOVERY_CONCURRENCY)
+        found: list[str] = []
+
+        async def _probe(candidate: str) -> None:
+            async with semaphore:
+                detected = await self._async_probe_host(candidate, port)
+                if detected is not None:
+                    found.append(detected)
+
+        await asyncio.gather(*(_probe(candidate) for candidate in candidates))
+        return sorted(found, key=lambda item: tuple(int(part) for part in item.split(".")))
+
     async def async_step_user(self, user_input=None):
         errors = {}
         if user_input is not None:
-            return self.async_create_entry(title=f"O'Foehn ({user_input['host']})", data=user_input)
+            try:
+                info = await self._async_validate_input(user_input)
+            except Exception:
+                errors["base"] = "cannot_connect"
+            else:
+                unique_id = info.get("serial_number") or info.get("mac_address")
+                if unique_id:
+                    await self.async_set_unique_id(str(unique_id))
+                    self._abort_if_unique_id_configured()
 
-        data_schema = vol.Schema(
-            {
-                vol.Required("host"): str,
-                vol.Optional("port", default=DEFAULT_PORT): int,
-                vol.Optional("auth_mode", default=AUTH_NONE): vol.In(AUTH_OPTIONS),
-                vol.Optional("username"): str,
-                vol.Optional("password"): str,
-                vol.Optional("login_path", default="/login.cgi"): str,
-                vol.Optional("login_method", default="POST"): vol.In(["GET", "POST"]),
-                vol.Optional("user_field", default="user"): str,
-                vol.Optional("pass_field", default="pass"): str,
-                vol.Optional("timeout", default=DEFAULT_TIMEOUT): int,
-            }
+                data = dict(user_input)
+                if info.get("serial_number"):
+                    data["serial_number"] = info["serial_number"]
+                if info.get("mac_address"):
+                    data["mac_address"] = info["mac_address"]
+                return self.async_create_entry(title=f"O'Foehn ({user_input[CONF_HOST]})", data=data)
+
+        defaults = dict(user_input or {})
+        if not defaults and not self._detected_hosts:
+            self._detected_hosts = await self._async_discover_hosts(DEFAULT_PORT)
+        if self._detected_hosts and not defaults.get(CONF_HOST):
+            defaults[CONF_HOST] = self._detected_hosts[0]
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=self._build_user_schema(defaults),
+            errors=errors,
+            description_placeholders={
+                "detected_hosts": ", ".join(self._detected_hosts) if self._detected_hosts else "-"
+            },
         )
-        return self.async_show_form(step_id="user", data_schema=data_schema, errors=errors)
 
     @staticmethod
     @callback
