@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 
-from .const import DOMAIN, PLATFORMS, SCAN_INTERVAL
+from .const import CONF_SCAN_INTERVAL, DOMAIN, PLATFORMS, SCAN_INTERVAL
 from .coordinator import OFoehnApi, OFoehnCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -19,6 +19,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    if entry.unique_id is None:
+        hass.config_entries.async_update_entry(
+            entry, unique_id=entry.data["host"].strip().lower()
+        )
+
     session: ClientSession = hass.helpers.aiohttp_client.async_get_clientsession()
 
     api = OFoehnApi(
@@ -37,9 +42,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = OFoehnCoordinator(
         hass=hass,
         logger=_LOGGER,
-        name="ofoehn_poolpilot",
+        name=DOMAIN,
         api=api,
-        update_interval=timedelta(seconds=SCAN_INTERVAL),
+        update_interval=timedelta(
+            seconds=entry.options.get(CONF_SCAN_INTERVAL, SCAN_INTERVAL)
+        ),
         options=entry.options,
     )
     await coordinator.async_config_entry_first_refresh()

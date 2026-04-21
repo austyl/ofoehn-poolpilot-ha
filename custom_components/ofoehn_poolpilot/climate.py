@@ -3,9 +3,10 @@ from __future__ import annotations
 from homeassistant.components.climate import ClimateEntity
 from homeassistant.components.climate.const import HVACMode, ClimateEntityFeature
 from homeassistant.const import UnitOfTemperature
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DEFAULT_NAME, DOMAIN
 from .coordinator import OFoehnCoordinator
 
 SUPPORTED_HVAC = [HVACMode.OFF, HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO]
@@ -15,10 +16,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data[DOMAIN][entry.entry_id]
     coord: OFoehnCoordinator = data["coordinator"]
     host = data["host"]
-    async_add_entities([OFoehnClimate(coord, host, entry.entry_id)], True)
+    async_add_entities([OFoehnClimate(coord, host)], True)
 
 
 class OFoehnClimate(CoordinatorEntity, ClimateEntity):
+    _attr_has_entity_name = True
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = SUPPORTED_HVAC
@@ -26,21 +28,16 @@ class OFoehnClimate(CoordinatorEntity, ClimateEntity):
     _attr_min_temp = 10
     _attr_max_temp = 35
 
-    def __init__(self, coordinator: OFoehnCoordinator, host: str, entry_id: str):
+    def __init__(self, coordinator: OFoehnCoordinator, host: str):
         super().__init__(coordinator)
-        self._host = host
-        self._entry_id = entry_id
-        self._attr_name = "O'Foehn – PAC Piscine"
+        self._attr_name = "PAC piscine"
         self._attr_unique_id = f"ofoehn_climate_{host}"
-
-    @property
-    def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._host)},
-            "name": "O'Foehn PoolPilot",
-            "manufacturer": "O'Foehn",
-            "model": "PoolPilot",
-        }
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, host)},
+            name=DEFAULT_NAME,
+            manufacturer="O'Foehn",
+            model="PoolPilot",
+        )
 
     def _is_power_on(self):
         idx = self.coordinator.data["indices"].get("power_idx")
@@ -48,7 +45,7 @@ class OFoehnClimate(CoordinatorEntity, ClimateEntity):
             return True
         try:
             return float(self.coordinator.data["super"].get(idx, 1)) > 0
-        except Exception:
+        except (TypeError, ValueError):
             return True
 
     async def _power_on(self):
@@ -72,6 +69,8 @@ class OFoehnClimate(CoordinatorEntity, ClimateEntity):
 
     @property
     def hvac_mode(self):
+        if self.coordinator.data["reg"].get("mode") == "OFF":
+            return HVACMode.OFF
         if not self._is_power_on():
             return HVACMode.OFF
         mode = self.coordinator.data["reg"].get("mode", "AUTO")

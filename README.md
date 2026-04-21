@@ -13,7 +13,7 @@ Version **v0.2.1** — Ajout de l'**authentification**: NONE / BASIC / QUERY / C
 - Entité **Climate** (OFF/AUTO/CHAUD/FROID, consigne pas de 0,5 °C)
 - Capteurs : **Eau In / Eau Out / Air**
 - Switchs : **PAC – Alimentation** & **Éclairage**
-- **Config Flow** (IP/Port + Auth)
+- **Config Flow** avec test de connexion, prévention des doublons et options avancées
 - Exemples Lovelace (`examples/`)
 
 ## 🔐 Authentification
@@ -22,9 +22,10 @@ Version **v0.2.1** — Ajout de l'**authentification**: NONE / BASIC / QUERY / C
 - **QUERY** : identifiants injectés en **query string** et payloads
 - **COOKIE** : login sur `login_path` (POST par défaut), cookies réutilisés, relogin auto sur 401/403
 
-## ⚙️ Indices DONNEE# (par défaut)
+## ⚙️ Options avancées
 - Eau In `5`, Eau Out `6`, Air `7`, Lumière `16`, Alimentation `24`.  
 Personnalisables via **Options**.
+- Intervalle de rafraîchissement ajustable de `5` à `300` secondes.
 
 ## 🚀 Installation via HACS
 1. HACS → Dépôts personnalisés → Ajouter cet entrepôt (catégorie **Intégration**)
