@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import asyncio
-from ipaddress import ip_address
 from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.components import network
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -25,8 +22,6 @@ from .const import (
 )
 
 AUTH_OPTIONS = [AUTH_NONE, AUTH_BASIC, AUTH_QUERY, AUTH_COOKIE]
-DISCOVERY_TIMEOUT = 1
-DISCOVERY_FORM_TIMEOUT = 2
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -82,44 +77,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             "module_name": parsed_accueil.get("module_name"),
         }
 
-    async def _async_probe_host(self, host: str, port: int) -> str | None:
-        session = async_get_clientsession(self.hass)
-        api = OFoehnApi(
-            host=host,
-            port=port,
-            session=session,
-            timeout=DISCOVERY_TIMEOUT,
-        )
-        try:
-            raw_accueil = await api.read_accueil()
-        except Exception:
-            return None
-
-        parsed = parse_accueil_html(raw_accueil)
-        if parsed.get("serial_number") or parsed.get("module_name") or parsed.get("mode"):
-            return host
-        return None
-
-
-    async def _async_get_local_ipv4(self) -> str | None:
-        adapters = await network.async_get_adapters(self.hass)
-        for adapter in adapters:
-            for ipv4 in adapter.get("ipv4", []):
-                local_ip = ip_address(ipv4["address"])
-                if local_ip.is_loopback or local_ip.is_link_local or not local_ip.is_private:
-                    continue
-                return str(local_ip)
-        return None
-
-    async def _async_discover_hosts(self, port: int) -> list[str]:
-        local_ip = await self._async_get_local_ipv4()
-        if not local_ip:
-            return []
-
-        detected = await self._async_probe_host(local_ip, port)
-        if detected:
-            return [detected]
-        return []
 
 
     async def async_step_user(self, user_input=None):
@@ -143,23 +100,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(title=f"O'Foehn ({user_input[CONF_HOST]})", data=data)
 
         defaults = dict(user_input or {})
-        if not defaults:
-            local_ip = await self._async_get_local_ipv4()
-            if local_ip and not defaults.get(CONF_HOST):
-                defaults[CONF_HOST] = local_ip
-
-            if not self._detected_hosts:
-                try:
-                    self._detected_hosts = await asyncio.wait_for(
-                        self._async_discover_hosts(DEFAULT_PORT), timeout=DISCOVERY_FORM_TIMEOUT
-                    )
-                except asyncio.TimeoutError:
-                    self._detected_hosts = []
-                except Exception:
-                    self._detected_hosts = []
-
-            if self._detected_hosts and not defaults.get(CONF_HOST):
-                defaults[CONF_HOST] = self._detected_hosts[0]
+        if not defaults and not defaults.get(CONF_HOST):
+            defaults[CONF_HOST] = ""
+        self._detected_hosts = []
 
         return self.async_show_form(
             step_id="user",
