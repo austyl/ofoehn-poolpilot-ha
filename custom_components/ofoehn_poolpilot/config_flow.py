@@ -8,7 +8,7 @@ from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNA
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .coordinator import OFoehnApi, parse_accueil_html, parse_donnees, parse_super_values
+from .coordinator import OFoehnApi, parse_donnees
 
 from .const import (
     DOMAIN,
@@ -27,9 +27,6 @@ AUTH_OPTIONS = [AUTH_NONE, AUTH_BASIC, AUTH_QUERY, AUTH_COOKIE]
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
-    def __init__(self) -> None:
-        self._detected_hosts: list[str] = []
-
     def _build_user_schema(self, defaults: dict[str, Any] | None = None) -> vol.Schema:
         defaults = defaults or {}
         return vol.Schema(
@@ -47,70 +44,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
 
-    async def _async_validate_input(self, user_input: dict[str, Any]) -> dict[str, Any]:
-        session = async_get_clientsession(self.hass)
-        api = OFoehnApi(
-            host=user_input[CONF_HOST],
-            port=user_input.get(CONF_PORT, DEFAULT_PORT),
-            session=session,
-            auth_mode=user_input.get("auth_mode", AUTH_NONE),
-            username=user_input.get(CONF_USERNAME),
-            password=user_input.get(CONF_PASSWORD),
-            login_path=user_input.get("login_path", "/login.cgi"),
-            login_method=user_input.get("login_method", "POST"),
-            user_field=user_input.get("user_field", "user"),
-            pass_field=user_input.get("pass_field", "pass"),
-            timeout=user_input.get("timeout", DEFAULT_TIMEOUT),
-        )
-
-        raw_super = await api.read_super()
-        raw_accueil = await api.read_accueil()
-
-        parsed_super = parse_super_values(raw_super)
-        parsed_accueil = parse_accueil_html(raw_accueil)
-        if not parsed_super and not parsed_accueil:
-            raise ValueError("Not an O'Foehn payload")
-
-        return {
-            "serial_number": parsed_accueil.get("serial_number"),
-            "mac_address": parsed_accueil.get("mac_address"),
-            "module_name": parsed_accueil.get("module_name"),
-        }
-
-
-
     async def async_step_user(self, user_input=None):
         errors = {}
         if user_input is not None:
-            try:
-                info = await self._async_validate_input(user_input)
-            except Exception:
-                errors["base"] = "cannot_connect"
-            else:
-                unique_id = info.get("serial_number") or info.get("mac_address")
-                if unique_id:
-                    await self.async_set_unique_id(str(unique_id))
-                    self._abort_if_unique_id_configured()
-
-                data = dict(user_input)
-                if info.get("serial_number"):
-                    data["serial_number"] = info["serial_number"]
-                if info.get("mac_address"):
-                    data["mac_address"] = info["mac_address"]
-                return self.async_create_entry(title=f"O'Foehn ({user_input[CONF_HOST]})", data=data)
+            unique_id = str(user_input[CONF_HOST]).strip().lower()
+            await self.async_set_unique_id(unique_id)
+            self._abort_if_unique_id_configured()
+            return self.async_create_entry(title=f"O'Foehn ({user_input[CONF_HOST]})", data=dict(user_input))
 
         defaults = dict(user_input or {})
         if not defaults and not defaults.get(CONF_HOST):
             defaults[CONF_HOST] = ""
-        self._detected_hosts = []
-
         return self.async_show_form(
             step_id="user",
             data_schema=self._build_user_schema(defaults),
             errors=errors,
-            description_placeholders={
-                "detected_hosts": ", ".join(self._detected_hosts) if self._detected_hosts else "-"
-            },
         )
 
     @staticmethod
