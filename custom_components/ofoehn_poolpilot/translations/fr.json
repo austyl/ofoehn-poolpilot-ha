@@ -21,7 +21,8 @@
     },
     "abort": {
       "already_configured": "Cet appareil est déjà configuré.",
-      "single_instance_allowed": "Une seule configuration O'Foehn PoolPilot est autorisée. Modifiez ou supprimez l'entrée existante."
+      "single_instance_allowed": "Une seule configuration O'Foehn PoolPilot est autorisée. Modifiez ou supprimez l'entrée existante.",
+      "reauth_successful": "Configuration mise à jour. L'intégration a été rechargée."
     },
     "error": {
       "cannot_connect": "Connexion à la PAC impossible.",

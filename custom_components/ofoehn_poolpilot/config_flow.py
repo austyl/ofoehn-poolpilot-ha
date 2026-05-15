@@ -46,19 +46,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input=None):
         errors = {}
-        if self._async_current_entries() and user_input is None:
-            return self.async_abort(reason="single_instance_allowed")
+        existing_entries = self._async_current_entries()
+        existing_entry = existing_entries[0] if existing_entries else None
 
         if user_input is not None:
-            if self._async_current_entries():
-                return self.async_abort(reason="single_instance_allowed")
+            if existing_entry:
+                self.hass.config_entries.async_update_entry(existing_entry, data=dict(user_input))
+                await self.hass.config_entries.async_reload(existing_entry.entry_id)
+                return self.async_abort(reason="reauth_successful")
             unique_id = str(user_input[CONF_HOST]).strip().lower()
             await self.async_set_unique_id(unique_id)
             self._abort_if_unique_id_configured()
             return self.async_create_entry(title=f"O'Foehn ({user_input[CONF_HOST]})", data=dict(user_input))
 
-        defaults = dict(user_input or {})
-        if not defaults and not defaults.get(CONF_HOST):
+        defaults = dict(existing_entry.data) if existing_entry else dict(user_input or {})
+        if not defaults.get(CONF_HOST):
             defaults[CONF_HOST] = ""
         return self.async_show_form(
             step_id="user",
