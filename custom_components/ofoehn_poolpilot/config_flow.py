@@ -166,7 +166,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         defaults = dict(user_input or {})
         if not defaults and not self._detected_hosts:
-            self._detected_hosts = await self._async_discover_hosts(DEFAULT_PORT)
+            try:
+                self._detected_hosts = await asyncio.wait_for(
+                    self._async_discover_hosts(DEFAULT_PORT), timeout=8
+                )
+            except TimeoutError:
+                self._detected_hosts = []
+            except Exception:
+                self._detected_hosts = []
         if self._detected_hosts and not defaults.get(CONF_HOST):
             defaults[CONF_HOST] = self._detected_hosts[0]
 
