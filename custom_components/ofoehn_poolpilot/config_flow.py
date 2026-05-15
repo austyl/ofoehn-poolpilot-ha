@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from ipaddress import ip_address, ip_network
+from ipaddress import ip_address
 from typing import Any
 
 import voluptuous as vol
@@ -26,10 +26,6 @@ from .const import (
 
 AUTH_OPTIONS = [AUTH_NONE, AUTH_BASIC, AUTH_QUERY, AUTH_COOKIE]
 DISCOVERY_TIMEOUT = 1
-DISCOVERY_CONCURRENCY = 32
-DISCOVERY_FALLBACK_PREFIX = 24
-DISCOVERY_MAX_HOSTS = 256
-DISCOVERY_TOTAL_TIMEOUT = 8
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -103,47 +99,27 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return host
         return None
 
-    async def _async_discover_hosts(self, port: int) -> list[str]:
-        adapters = await network.async_get_adapters(self.hass)
-        candidates: list[str] = []
-        seen: set[str] = set()
 
+    async def _async_get_local_ipv4(self) -> str | None:
+        adapters = await network.async_get_adapters(self.hass)
         for adapter in adapters:
             for ipv4 in adapter.get("ipv4", []):
                 local_ip = ip_address(ipv4["address"])
                 if local_ip.is_loopback or local_ip.is_link_local or not local_ip.is_private:
                     continue
+                return str(local_ip)
+        return None
 
-                prefix = ipv4["network_prefix"]
-                if prefix < DISCOVERY_FALLBACK_PREFIX:
-                    scan_network = ip_network(f"{local_ip}/{DISCOVERY_FALLBACK_PREFIX}", strict=False)
-                else:
-                    scan_network = ip_network(f"{local_ip}/{prefix}", strict=False)
-
-                if scan_network.num_addresses > DISCOVERY_MAX_HOSTS:
-                    scan_network = ip_network(f"{local_ip}/{DISCOVERY_FALLBACK_PREFIX}", strict=False)
-
-                for candidate in scan_network.hosts():
-                    host = str(candidate)
-                    if candidate == local_ip or host in seen:
-                        continue
-                    seen.add(host)
-                    candidates.append(host)
-
-        if not candidates:
+    async def _async_discover_hosts(self, port: int) -> list[str]:
+        local_ip = await self._async_get_local_ipv4()
+        if not local_ip:
             return []
 
-        semaphore = asyncio.Semaphore(DISCOVERY_CONCURRENCY)
-        found: list[str] = []
+        detected = await self._async_probe_host(local_ip, port)
+        if detected:
+            return [detected]
+        return []
 
-        async def _probe(candidate: str) -> None:
-            async with semaphore:
-                detected = await self._async_probe_host(candidate, port)
-                if detected is not None:
-                    found.append(detected)
-
-        await asyncio.gather(*(_probe(candidate) for candidate in candidates))
-        return sorted(found, key=lambda item: tuple(int(part) for part in item.split(".")))
 
     async def async_step_user(self, user_input=None):
         errors = {}
