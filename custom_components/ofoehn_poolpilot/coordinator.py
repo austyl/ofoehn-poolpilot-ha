@@ -66,6 +66,7 @@ TEMP_PAIR_RE = re.compile(
 READ_RETRIES = 2
 READ_RETRY_DELAY = 0.75
 INTER_REQUEST_DELAY = 0.25
+RETRYABLE_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 
 
 def clean_html_text(raw: str | None) -> str:
@@ -397,7 +398,7 @@ class OFoehnApi:
                     await self._maybe_login(force=True)
                     auth_retry_done = True
                     continue
-                if method != "GET" or attempt >= retries:
+                if method != "GET" or attempt >= retries or err.status not in RETRYABLE_HTTP_STATUSES:
                     raise
                 attempt += 1
                 delay = READ_RETRY_DELAY * attempt

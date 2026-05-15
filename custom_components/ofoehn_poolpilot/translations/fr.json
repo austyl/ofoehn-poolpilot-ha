@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Connexion à la PAC O'Foehn",
-        "description": "Entrez l'adresse IP et choisissez le mode d'authentification si nécessaire. Détection automatique locale: {detected_hosts}.",
+        "description": "Entrez l'adresse IP et choisissez le mode d'authentification si nécessaire.",
         "data": {
           "host": "Adresse IP",
           "port": "Port",
@@ -20,7 +20,8 @@
       }
     },
     "abort": {
-      "already_configured": "Cet appareil est déjà configuré."
+      "already_configured": "Cet appareil est déjà configuré.",
+      "single_instance_allowed": "Une seule configuration O'Foehn PoolPilot est autorisée. Modifiez ou supprimez l'entrée existante."
     },
     "error": {
       "cannot_connect": "Connexion à la PAC impossible.",
