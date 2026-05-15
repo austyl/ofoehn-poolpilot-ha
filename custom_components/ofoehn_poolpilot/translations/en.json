@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Connect to O'Foehn heat pump",
-        "description": "Enter the IP address and choose the authentication mode if required. Local auto-detection: {detected_hosts}.",
+        "description": "Enter the IP address and choose the authentication mode if required.",
         "data": {
           "host": "IP address",
           "port": "Port",
@@ -20,7 +20,9 @@
       }
     },
     "abort": {
-      "already_configured": "This device is already configured."
+      "already_configured": "This device is already configured.",
+      "single_instance_allowed": "Only one O'Foehn PoolPilot configuration is allowed. Edit or remove the existing entry.",
+      "reauth_successful": "Configuration updated. The integration has been reloaded."
     },
     "error": {
       "cannot_connect": "Cannot connect to the heat pump.",
