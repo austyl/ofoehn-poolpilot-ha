@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import asyncio
-from ipaddress import ip_address, ip_network
 from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.components import network
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -25,10 +22,6 @@ from .const import (
 )
 
 AUTH_OPTIONS = [AUTH_NONE, AUTH_BASIC, AUTH_QUERY, AUTH_COOKIE]
-DISCOVERY_TIMEOUT = 1
-DISCOVERY_CONCURRENCY = 32
-DISCOVERY_FALLBACK_PREFIX = 24
-DISCOVERY_MAX_HOSTS = 256
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -84,65 +77,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             "module_name": parsed_accueil.get("module_name"),
         }
 
-    async def _async_probe_host(self, host: str, port: int) -> str | None:
-        session = async_get_clientsession(self.hass)
-        api = OFoehnApi(
-            host=host,
-            port=port,
-            session=session,
-            timeout=DISCOVERY_TIMEOUT,
-        )
-        try:
-            raw_accueil = await api.read_accueil()
-        except Exception:
-            return None
 
-        parsed = parse_accueil_html(raw_accueil)
-        if parsed.get("serial_number") or parsed.get("module_name") or parsed.get("mode"):
-            return host
-        return None
-
-    async def _async_discover_hosts(self, port: int) -> list[str]:
-        adapters = await network.async_get_adapters(self.hass)
-        candidates: list[str] = []
-        seen: set[str] = set()
-
-        for adapter in adapters:
-            for ipv4 in adapter.get("ipv4", []):
-                local_ip = ip_address(ipv4["address"])
-                if local_ip.is_loopback or local_ip.is_link_local or not local_ip.is_private:
-                    continue
-
-                prefix = ipv4["network_prefix"]
-                if prefix < DISCOVERY_FALLBACK_PREFIX:
-                    scan_network = ip_network(f"{local_ip}/{DISCOVERY_FALLBACK_PREFIX}", strict=False)
-                else:
-                    scan_network = ip_network(f"{local_ip}/{prefix}", strict=False)
-
-                if scan_network.num_addresses > DISCOVERY_MAX_HOSTS:
-                    scan_network = ip_network(f"{local_ip}/{DISCOVERY_FALLBACK_PREFIX}", strict=False)
-
-                for candidate in scan_network.hosts():
-                    host = str(candidate)
-                    if candidate == local_ip or host in seen:
-                        continue
-                    seen.add(host)
-                    candidates.append(host)
-
-        if not candidates:
-            return []
-
-        semaphore = asyncio.Semaphore(DISCOVERY_CONCURRENCY)
-        found: list[str] = []
-
-        async def _probe(candidate: str) -> None:
-            async with semaphore:
-                detected = await self._async_probe_host(candidate, port)
-                if detected is not None:
-                    found.append(detected)
-
-        await asyncio.gather(*(_probe(candidate) for candidate in candidates))
-        return sorted(found, key=lambda item: tuple(int(part) for part in item.split(".")))
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -165,10 +100,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(title=f"O'Foehn ({user_input[CONF_HOST]})", data=data)
 
         defaults = dict(user_input or {})
-        if not defaults and not self._detected_hosts:
-            self._detected_hosts = await self._async_discover_hosts(DEFAULT_PORT)
-        if self._detected_hosts and not defaults.get(CONF_HOST):
-            defaults[CONF_HOST] = self._detected_hosts[0]
+        if not defaults and not defaults.get(CONF_HOST):
+            defaults[CONF_HOST] = ""
+        self._detected_hosts = []
 
         return self.async_show_form(
             step_id="user",
