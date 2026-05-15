@@ -27,9 +27,6 @@ AUTH_OPTIONS = [AUTH_NONE, AUTH_BASIC, AUTH_QUERY, AUTH_COOKIE]
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
-    def __init__(self) -> None:
-        self._detected_hosts: list[str] = []
-
     def _build_user_schema(self, defaults: dict[str, Any] | None = None) -> vol.Schema:
         defaults = defaults or {}
         return vol.Schema(
@@ -102,15 +99,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         defaults = dict(user_input or {})
         if not defaults and not defaults.get(CONF_HOST):
             defaults[CONF_HOST] = ""
-        self._detected_hosts = []
-
         return self.async_show_form(
             step_id="user",
             data_schema=self._build_user_schema(defaults),
             errors=errors,
-            description_placeholders={
-                "detected_hosts": ", ".join(self._detected_hosts) if self._detected_hosts else "-"
-            },
         )
 
     @staticmethod
