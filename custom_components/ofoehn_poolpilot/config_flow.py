@@ -142,23 +142,16 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(title=f"O'Foehn ({user_input[CONF_HOST]})", data=data)
 
         defaults = dict(user_input or {})
-        if not defaults:
-            local_ip = await self._async_get_local_ipv4()
-            if local_ip and not defaults.get(CONF_HOST):
-                defaults[CONF_HOST] = local_ip
-
-            if not self._detected_hosts:
-                try:
-                    self._detected_hosts = await asyncio.wait_for(
-                        self._async_discover_hosts(DEFAULT_PORT), timeout=2
-                    )
-                except TimeoutError:
-                    self._detected_hosts = []
-                except Exception:
-                    self._detected_hosts = []
-
-            if self._detected_hosts and not defaults.get(CONF_HOST):
-                defaults[CONF_HOST] = self._detected_hosts[0]
+        if not defaults and not self._detected_hosts:
+            try:
+                self._detected_hosts = await asyncio.wait_for(
+                    self._async_discover_hosts(DEFAULT_PORT),
+                    timeout=DISCOVERY_TOTAL_TIMEOUT,
+                )
+            except (TimeoutError, Exception):
+                self._detected_hosts = []
+        if self._detected_hosts and not defaults.get(CONF_HOST):
+            defaults[CONF_HOST] = self._detected_hosts[0]
 
         return self.async_show_form(
             step_id="user",
