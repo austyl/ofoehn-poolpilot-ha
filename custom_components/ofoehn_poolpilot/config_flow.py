@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlparse
 
 import voluptuous as vol
+from aiohttp import ClientError, ClientResponseError
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .coordinator import OFoehnApi, parse_donnees
+from .coordinator import OFoehnApi, parse_accueil_html, parse_donnees
 
 from .const import (
     DOMAIN,
@@ -24,8 +27,119 @@ from .const import (
 AUTH_OPTIONS = [AUTH_NONE, AUTH_BASIC, AUTH_QUERY, AUTH_COOKIE]
 
 
+class CannotConnect(HomeAssistantError):
+    """Error to indicate we cannot connect."""
+
+
+class InvalidAuth(HomeAssistantError):
+    """Error to indicate the device rejected authentication."""
+
+
+class InvalidHost(HomeAssistantError):
+    """Error to indicate the provided host is invalid."""
+
+
+class MissingAuth(HomeAssistantError):
+    """Error to indicate credentials are required."""
+
+
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
+
+    def _normalize_host(self, value: str) -> tuple[str, int | None]:
+        raw = value.strip()
+        if not raw:
+            raise InvalidHost
+
+        parsed = urlparse(raw if "://" in raw else f"//{raw}")
+        host = parsed.hostname or parsed.path.split("/", 1)[0].split(":", 1)[0]
+        if not host:
+            raise InvalidHost
+        try:
+            port = parsed.port
+        except ValueError as err:
+            raise InvalidHost from err
+        return host.strip().lower(), port
+
+    def _normalize_path(self, value: str, default: str) -> str:
+        path = value.strip()
+        if not path:
+            return default
+        if "://" in path:
+            path = urlparse(path).path or default
+        if not path.startswith("/"):
+            path = f"/{path}"
+        return path
+
+    def _prepare_user_input(self, user_input: dict[str, Any]) -> dict[str, Any]:
+        data = dict(user_input)
+        host, parsed_port = self._normalize_host(str(data.get(CONF_HOST, "")))
+        data[CONF_HOST] = host
+        if parsed_port and data.get(CONF_PORT, DEFAULT_PORT) == DEFAULT_PORT:
+            data[CONF_PORT] = parsed_port
+        data["auth_mode"] = str(data.get("auth_mode", AUTH_NONE)).strip().lower()
+        data[CONF_USERNAME] = str(data.get(CONF_USERNAME, "")).strip()
+        data[CONF_PASSWORD] = "" if data.get(CONF_PASSWORD) is None else str(data.get(CONF_PASSWORD))
+        data["login_path"] = self._normalize_path(
+            str(data.get("login_path", "/login.cgi")),
+            "/login.cgi",
+        )
+        data["login_method"] = str(data.get("login_method", "POST")).strip().upper() or "POST"
+        data["user_field"] = str(data.get("user_field", "user")).strip() or "user"
+        data["pass_field"] = str(data.get("pass_field", "pass")).strip() or "pass"
+        data["timeout"] = int(data.get("timeout", DEFAULT_TIMEOUT))
+
+        if data["auth_mode"] != AUTH_NONE:
+            if not data[CONF_USERNAME] or not data[CONF_PASSWORD].strip():
+                raise MissingAuth
+
+        return data
+
+    async def _async_validate_input(self, user_input: dict[str, Any]) -> dict[str, Any]:
+        data = self._prepare_user_input(user_input)
+        session = async_get_clientsession(self.hass)
+        api = OFoehnApi(
+            host=data[CONF_HOST],
+            port=data.get(CONF_PORT, DEFAULT_PORT),
+            session=session,
+            auth_mode=data.get("auth_mode", AUTH_NONE),
+            username=data.get(CONF_USERNAME),
+            password=data.get(CONF_PASSWORD),
+            login_path=data.get("login_path", "/login.cgi"),
+            login_method=data.get("login_method", "POST"),
+            user_field=data.get("user_field", "user"),
+            pass_field=data.get("pass_field", "pass"),
+            timeout=data.get("timeout", DEFAULT_TIMEOUT),
+        )
+
+        try:
+            raw_super = await api.read_super()
+            raw_accueil = await api.read_accueil()
+        except ClientResponseError as err:
+            if err.status in (401, 403):
+                raise InvalidAuth from err
+            raise CannotConnect from err
+        except (ClientError, OSError, TimeoutError) as err:
+            raise CannotConnect from err
+
+        parsed_super = parse_donnees(raw_super)
+        parsed_accueil = parse_accueil_html(raw_accueil)
+        if not parsed_super and not parsed_accueil:
+            raise CannotConnect
+
+        if (
+            data.get("auth_mode") == AUTH_NONE
+            and not parsed_super
+            and not parsed_accueil.get("serial_number")
+            and not parsed_accueil.get("mode")
+        ):
+            raise InvalidAuth
+
+        if parsed_accueil.get("serial_number"):
+            data["serial_number"] = parsed_accueil["serial_number"]
+        if parsed_accueil.get("mac_address"):
+            data["mac_address"] = parsed_accueil["mac_address"]
+        return data
 
     def _build_user_schema(self, defaults: dict[str, Any] | None = None) -> vol.Schema:
         defaults = defaults or {}
@@ -50,14 +164,38 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         existing_entry = existing_entries[0] if existing_entries else None
 
         if user_input is not None:
-            if existing_entry:
-                self.hass.config_entries.async_update_entry(existing_entry, data=dict(user_input))
-                await self.hass.config_entries.async_reload(existing_entry.entry_id)
-                return self.async_abort(reason="reauth_successful")
-            unique_id = str(user_input[CONF_HOST]).strip().lower()
-            await self.async_set_unique_id(unique_id)
-            self._abort_if_unique_id_configured()
-            return self.async_create_entry(title=f"O'Foehn ({user_input[CONF_HOST]})", data=dict(user_input))
+            try:
+                prepared_input = await self._async_validate_input(user_input)
+            except InvalidAuth:
+                errors["base"] = "invalid_auth"
+            except MissingAuth:
+                errors["base"] = "missing_auth"
+            except InvalidHost:
+                errors["base"] = "invalid_host"
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except Exception:
+                errors["base"] = "unknown"
+            else:
+                if existing_entry:
+                    self.hass.config_entries.async_update_entry(
+                        existing_entry,
+                        data=prepared_input,
+                    )
+                    await self.hass.config_entries.async_reload(existing_entry.entry_id)
+                    return self.async_abort(reason="reauth_successful")
+
+                unique_id = str(
+                    prepared_input.get("serial_number")
+                    or prepared_input.get("mac_address")
+                    or prepared_input[CONF_HOST]
+                ).strip().lower()
+                await self.async_set_unique_id(unique_id)
+                self._abort_if_unique_id_configured()
+                return self.async_create_entry(
+                    title=f"O'Foehn ({prepared_input[CONF_HOST]})",
+                    data=prepared_input,
+                )
 
         defaults = dict(existing_entry.data) if existing_entry else dict(user_input or {})
         if not defaults.get(CONF_HOST):

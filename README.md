@@ -9,7 +9,7 @@
 # O'Foehn PoolPilot – Home Assistant (HACS)
 
 Pilotage **local** de la PAC piscine **O'Foehn** via CGI *PoolPilot* (accueil.cgi, super.cgi, getReg.cgi, setReg.cgi, changeOnOff.cgi, toggleE.cgi).  
-Version **v0.2.2** — amélioration de la fiabilité réseau, ajout d'un logo HACS, enrichissement des diagnostics et détection locale de l'IP au moment de la configuration.
+Version **v0.2.3** — suppression de l'auto-détection réseau, validation réelle de la connexion pendant la configuration et meilleure prise en charge des mises à jour d'IP.
 
 ## ✨ Fonctionnalités
 - Entité **Climate** (OFF/AUTO/CHAUD/FROID, consigne pas de 0,5 °C)
@@ -17,7 +17,7 @@ Version **v0.2.2** — amélioration de la fiabilité réseau, ajout d'un logo H
 - Capteurs diagnostiques avancés : états, module, firmware, numéro de série, MAC, options, températures, pressions et relais
 - Capteurs *Raw* : **Super / Accueil / Reg** (valeur affichée limitée à 255 caractères, réponse complète dans les attributs `raw`, `plain_text` et `lines`)
 - Switchs : **PAC – Alimentation** & **Éclairage**
-- **Config Flow** (IP/Port + Auth) avec tentative de détection locale automatique de l'IP
+- **Config Flow** (IP/Port + Auth) avec validation de connexion avant création/mise à jour
 - Gestion plus robuste des micro-coupures réseau grâce aux retries et au dernier état valide conservé
 
 ## 🔐 Authentification
@@ -26,8 +26,8 @@ Version **v0.2.2** — amélioration de la fiabilité réseau, ajout d'un logo H
 - **QUERY** : identifiants injectés en **query string** et payloads
 - **COOKIE** : login sur `login_path` (POST par défaut), cookies réutilisés, relogin auto sur 401/403
 
-## 🧭 Détection
-Lors de l'ajout de l'intégration, le formulaire tente de détecter automatiquement l'IP de la PAC sur le sous-réseau local de Home Assistant et préremplit le champ si une réponse O'Foehn valide est trouvée.
+## 🧭 Configuration
+Lors de l'ajout de l'intégration, saisissez l'adresse IP réelle de la PAC. Le formulaire vérifie maintenant `super.cgi` et `accueil.cgi` avant de créer ou mettre à jour l'entrée, ce qui évite les boucles de configuration avec une IP erronée ou un mauvais mode d'authentification.
 
 ## ⚙️ Indices DONNEE# (par défaut)
 - Eau In `5`, Eau Out `6`, Air `7`, Lumière `16`, Alimentation `24`.  

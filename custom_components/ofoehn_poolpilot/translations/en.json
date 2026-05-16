@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Connect to O'Foehn heat pump",
-        "description": "Enter the IP address and choose the authentication mode if required.",
+        "description": "Enter the heat pump's real IP address and choose the authentication mode if required. If a configuration already exists, this form will update it.",
         "data": {
           "host": "IP address",
           "port": "Port",
@@ -27,6 +27,7 @@
     "error": {
       "cannot_connect": "Cannot connect to the heat pump.",
       "invalid_auth": "Authentication was rejected by the heat pump.",
+      "invalid_host": "Invalid IP address or hostname.",
       "missing_auth": "Username and password are required for this mode.",
       "unknown": "Unexpected error."
     }

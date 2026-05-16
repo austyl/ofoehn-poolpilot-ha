@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Connexion à la PAC O'Foehn",
-        "description": "Entrez l'adresse IP et choisissez le mode d'authentification si nécessaire.",
+        "description": "Entrez l'adresse IP réelle de la PAC et choisissez le mode d'authentification si nécessaire. Si une configuration existe déjà, ce formulaire la mettra à jour.",
         "data": {
           "host": "Adresse IP",
           "port": "Port",
@@ -27,6 +27,7 @@
     "error": {
       "cannot_connect": "Connexion à la PAC impossible.",
       "invalid_auth": "Authentification refusée par la PAC.",
+      "invalid_host": "Adresse IP ou nom d'hôte invalide.",
       "missing_auth": "Nom d'utilisateur et mot de passe requis pour ce mode.",
       "unknown": "Erreur inattendue."
     }
