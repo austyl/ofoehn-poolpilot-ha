@@ -1,39 +1,39 @@
 from __future__ import annotations
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import OFoehnCoordinator
-from .helpers import device_info_for_host
+from .helpers import OFoehnEntity, get_donnee_bool
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator: OFoehnCoordinator = data["coordinator"]
-    host = data["host"]
-    connectivity = ConnectivityBinarySensor(coordinator, host)
+    device_key = data["device_key"]
+    device_info = data["device_info"]
+    connectivity = ConnectivityBinarySensor(coordinator, device_key, device_info)
     sensors = [
         connectivity,
-        PumpBinarySensor(coordinator, host),
-        HeatingBinarySensor(coordinator, host),
+        PumpBinarySensor(coordinator, device_key, device_info),
+        HeatingBinarySensor(coordinator, device_key, device_info),
     ]
     async_add_entities(sensors, True)
     data["connectivity_sensor"] = connectivity
 
 
-class ConnectivityBinarySensor(CoordinatorEntity, BinarySensorEntity):
+class ConnectivityBinarySensor(OFoehnEntity, BinarySensorEntity):
     _attr_name = "O'Foehn PoolPilot Connectivity"
 
-    def __init__(self, coordinator: OFoehnCoordinator, host: str) -> None:
-        super().__init__(coordinator)
-        self._host = host
-        self._attr_unique_id = f"ofoehn_connectivity_{host}"
+    def __init__(
+        self,
+        coordinator: OFoehnCoordinator,
+        device_key: str,
+        device_info: dict,
+    ) -> None:
+        super().__init__(coordinator, device_key, device_info)
+        self._attr_unique_id = f"ofoehn_connectivity_{device_key}"
         self._last_check: bool | None = None
-
-    @property
-    def device_info(self):
-        return device_info_for_host(self._host)
 
     @property
     def is_on(self) -> bool:
@@ -47,61 +47,50 @@ class ConnectivityBinarySensor(CoordinatorEntity, BinarySensorEntity):
         return self._last_check
 
 
-class PumpBinarySensor(CoordinatorEntity, BinarySensorEntity):
+class PumpBinarySensor(OFoehnEntity, BinarySensorEntity):
     _attr_name = "O'Foehn Pompe"
 
-    def __init__(self, coordinator: OFoehnCoordinator, host: str) -> None:
-        super().__init__(coordinator)
-        self._host = host
-        self._attr_unique_id = f"ofoehn_pump_{host}"
-
-    @property
-    def device_info(self):
-        return device_info_for_host(self._host)
+    def __init__(
+        self,
+        coordinator: OFoehnCoordinator,
+        device_key: str,
+        device_info: dict,
+    ) -> None:
+        super().__init__(coordinator, device_key, device_info)
+        self._attr_unique_id = f"ofoehn_pump_{device_key}"
 
     @property
     def is_on(self) -> bool:
-        idx = self.coordinator.data["indices"].get("pump_idx")
-        if idx is None:
-            fallback = self.coordinator.data.get("pump_on")
-            return False if fallback is None else fallback
-        try:
-            value = self.coordinator.data["super"].get(idx)
-            if value is not None:
-                return float(value) > 0
-        except (TypeError, ValueError):
-            pass
-        fallback = self.coordinator.data.get("pump_on")
-        return False if fallback is None else fallback
+        result = get_donnee_bool(
+            self.coordinator.data,
+            "pump_idx",
+            fallback_key="pump_on",
+            default=False,
+        )
+        return bool(result)
 
 
-class HeatingBinarySensor(CoordinatorEntity, BinarySensorEntity):
+class HeatingBinarySensor(OFoehnEntity, BinarySensorEntity):
     _attr_name = "O'Foehn Chauffage"
 
-    def __init__(self, coordinator: OFoehnCoordinator, host: str) -> None:
-        super().__init__(coordinator)
-        self._host = host
-        self._attr_unique_id = f"ofoehn_heating_{host}"
-
-    @property
-    def device_info(self):
-        return device_info_for_host(self._host)
+    def __init__(
+        self,
+        coordinator: OFoehnCoordinator,
+        device_key: str,
+        device_info: dict,
+    ) -> None:
+        super().__init__(coordinator, device_key, device_info)
+        self._attr_unique_id = f"ofoehn_heating_{device_key}"
 
     @property
     def is_on(self) -> bool:
-        idx = self.coordinator.data["indices"].get("heating_idx")
-        if idx is None:
-            return bool(
-                self.coordinator.data.get("compressor_1_on")
-                or self.coordinator.data.get("compressor_2_on")
-            )
-        try:
-            value = self.coordinator.data["super"].get(idx)
-            if value is not None:
-                return float(value) > 0
-        except (TypeError, ValueError):
-            pass
-        return bool(
-            self.coordinator.data.get("compressor_1_on")
-            or self.coordinator.data.get("compressor_2_on")
+        result = get_donnee_bool(
+            self.coordinator.data,
+            "heating_idx",
+            fallback_key=None,
+            default=None,
         )
+        if result is not None:
+            return result
+        data = self.coordinator.data
+        return bool(data.get("compressor_1_on") or data.get("compressor_2_on"))

@@ -3,6 +3,11 @@ DEFAULT_PORT = 80
 DEFAULT_TIMEOUT = 10  # seconds
 PLATFORMS = ["climate", "sensor", "switch", "binary_sensor"]
 SCAN_INTERVAL = 30  # seconds
+MIN_SCAN_INTERVAL = 10
+MAX_SCAN_INTERVAL = 300
+
+CONF_ENABLE_RAW_SENSORS = "enable_raw_sensors"
+CONF_SCAN_INTERVAL = "scan_interval"
 
 # Auth modes
 AUTH_NONE = "none"
@@ -29,5 +34,5 @@ DEFAULT_INDEX = {
     "pump_idx": 10,
     "heating_idx": 11,
     "light_idx": 16,  # accueil.cgi souvent
-    "power_idx": 24   # état alim (selon firmware)
+    "power_idx": 24,  # état alim (selon firmware)
 }

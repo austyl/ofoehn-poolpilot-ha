@@ -3,8 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, format_mac
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
+from .coordinator import OFoehnCoordinator
 
 
 def build_device_info(device_key: str, host: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -36,6 +38,72 @@ def build_device_info(device_key: str, host: str, data: dict[str, Any]) -> dict[
     return info
 
 
-def device_info_for_host(host: str) -> dict[str, Any]:
-    """Backward-compatible device info helper."""
-    return build_device_info(host, host, {})
+def get_donnee_float(
+    data: dict[str, Any],
+    idx_key: str,
+    *,
+    source: str = "super",
+    fallback_key: str | None = None,
+) -> float | None:
+    """Read a numeric DONNEE index with an optional flat fallback key."""
+    indices = data.get("indices") or {}
+    idx = indices.get(idx_key)
+    if idx is not None:
+        bucket = data.get(source) or {}
+        value = bucket.get(idx)
+        if value is not None:
+            return float(value)
+    if fallback_key:
+        fallback = data.get(fallback_key)
+        if fallback is not None:
+            return float(fallback)
+    return None
+
+
+def get_donnee_bool(
+    data: dict[str, Any],
+    idx_key: str,
+    *,
+    source: str = "super",
+    fallback_key: str | None = None,
+    default: bool | None = None,
+) -> bool | None:
+    """Read a boolean DONNEE index with an optional flat fallback key."""
+    indices = data.get("indices") or {}
+    idx = indices.get(idx_key)
+    if idx is not None:
+        bucket = data.get(source) or {}
+        value = bucket.get(idx)
+        if value is not None:
+            try:
+                return float(value) > 0
+            except (TypeError, ValueError):
+                pass
+    if fallback_key is not None:
+        fallback = data.get(fallback_key)
+        if fallback is not None:
+            return bool(fallback)
+    return default
+
+
+class OFoehnEntity(CoordinatorEntity):
+    """Shared base for PoolPilot entities."""
+
+    def __init__(
+        self,
+        coordinator: OFoehnCoordinator,
+        device_key: str,
+        device_info: dict[str, Any],
+    ) -> None:
+        super().__init__(coordinator)
+        self._device_key = device_key
+        self._device_info = device_info
+
+    @property
+    def device_info(self) -> dict[str, Any]:
+        return self._device_info
+
+    @property
+    def available(self) -> bool:
+        data = self.coordinator.data or {}
+        return self.coordinator.last_update_success and not data.get("super_stale", False)

@@ -10,12 +10,31 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
-from .const import DOMAIN, PLATFORMS, SCAN_INTERVAL, DEFAULT_TIMEOUT
+from .const import (
+    CONF_ENABLE_RAW_SENSORS,
+    CONF_SCAN_INTERVAL,
+    DOMAIN,
+    MAX_SCAN_INTERVAL,
+    MIN_SCAN_INTERVAL,
+    PLATFORMS,
+    SCAN_INTERVAL,
+    DEFAULT_TIMEOUT,
+)
 from .coordinator import OFoehnApi, OFoehnCoordinator
 from .helpers import build_device_info
 
 _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+def _scan_interval_from_options(options: dict) -> timedelta:
+    raw = options.get(CONF_SCAN_INTERVAL, SCAN_INTERVAL)
+    try:
+        seconds = int(raw)
+    except (TypeError, ValueError):
+        seconds = SCAN_INTERVAL
+    seconds = max(MIN_SCAN_INTERVAL, min(MAX_SCAN_INTERVAL, seconds))
+    return timedelta(seconds=seconds)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -44,7 +63,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         logger=_LOGGER,
         name="ofoehn_poolpilot",
         api=api,
-        update_interval=timedelta(seconds=SCAN_INTERVAL),
+        update_interval=_scan_interval_from_options(entry.options),
         options=entry.options,
     )
     await coordinator.async_config_entry_first_refresh()
@@ -104,4 +123,35 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    await hass.config_entries.async_reload(entry.entry_id)
+    data = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if data is None:
+        return
+
+    previous_options = dict(data["coordinator"].options)
+    new_options = dict(entry.options)
+    coordinator: OFoehnCoordinator = data["coordinator"]
+
+    reload_needed = previous_options.get(CONF_ENABLE_RAW_SENSORS) != new_options.get(
+        CONF_ENABLE_RAW_SENSORS
+    )
+
+    coordinator.set_options(new_options)
+    coordinator.update_interval = _scan_interval_from_options(new_options)
+
+    if reload_needed:
+        await hass.config_entries.async_reload(entry.entry_id)
+        return
+
+    await coordinator.async_request_refresh()
+
+
+def update_device_info(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Refresh stored device info after coordinator data changes."""
+    data = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if data is None:
+        return
+    data["device_info"] = build_device_info(
+        data["device_key"],
+        entry.data["host"],
+        data["coordinator"].data or {},
+    )

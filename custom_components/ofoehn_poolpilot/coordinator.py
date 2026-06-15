@@ -5,7 +5,8 @@ import html
 import logging
 import re
 from datetime import timedelta
-from typing import Any, Optional
+from typing import Any, Callable, Optional
+from urllib.parse import urlencode
 
 from aiohttp import BasicAuth, ClientError, ClientResponseError, ClientSession
 from homeassistant.core import HomeAssistant
@@ -63,9 +64,8 @@ TEMP_PAIR_RE = re.compile(
     re.IGNORECASE,
 )
 
-READ_RETRIES = 0
+READ_RETRIES = 2
 READ_RETRY_DELAY = 0.75
-INTER_REQUEST_DELAY = 0.25
 RETRYABLE_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 
 
@@ -330,11 +330,9 @@ class OFoehnApi:
             q = query.copy() if query else {}
             q[self._user_field] = self._username
             q[self._pass_field] = self._password
-            from urllib.parse import urlencode
             sep = "&" if "?" in url else "?"
             url = url + sep + urlencode(q)
         elif query:
-            from urllib.parse import urlencode
             sep = "&" if "?" in url else "?"
             url = url + sep + urlencode(query)
         return url
@@ -463,7 +461,9 @@ class OFoehnApi:
     async def check_connection(self) -> bool:
         """Perform a lightweight request to verify connectivity."""
         try:
-            await self.read_super()
+            if self._auth_mode == AUTH_COOKIE:
+                await self._maybe_login()
+            await self._fetch("GET", ENDPOINTS["accueil"], retries=0)
             return True
         except Exception:
             return False
@@ -679,9 +679,19 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
         super().__init__(hass, logger, name=name, update_interval=update_interval)
         self.api = api
         self.options = options or {}
+        self._cached_indices: dict[str, int] | None = None
+        self._cached_indices_options: dict[str, Any] | None = None
+
+    def set_options(self, options: dict[str, Any]) -> None:
+        """Apply new config entry options and invalidate cached indices."""
+        self.options = options or {}
+        self._cached_indices = None
+        self._cached_indices_options = None
 
     def _build_indices(self) -> dict[str, int]:
-        return {
+        if self._cached_indices is not None and self._cached_indices_options == self.options:
+            return self._cached_indices
+        indices = {
             "water_in_idx": self.options.get("water_in_idx", DEFAULT_INDEX["water_in_idx"]),
             "water_out_idx": self.options.get("water_out_idx", DEFAULT_INDEX["water_out_idx"]),
             "air_idx": self.options.get("air_idx", DEFAULT_INDEX["air_idx"]),
@@ -692,6 +702,9 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
             "light_idx": self.options.get("light_idx", DEFAULT_INDEX["light_idx"]),
             "power_idx": self.options.get("power_idx", DEFAULT_INDEX["power_idx"]),
         }
+        self._cached_indices = indices
+        self._cached_indices_options = dict(self.options)
+        return indices
 
     async def _read_with_fallback(
         self,
@@ -720,30 +733,50 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
             )
             return "", True, str(err)
 
+    async def _read_endpoint(
+        self,
+        *,
+        name: str,
+        reader: Callable[[], Any],
+        previous_raw: str | None,
+        required: bool = False,
+    ) -> tuple[str, bool, str | None]:
+        return await self._read_with_fallback(
+            name=name,
+            reader=reader,
+            previous_raw=previous_raw,
+            required=required,
+        )
+
     async def _async_update_data(self) -> dict:
         previous = self.data if isinstance(self.data, dict) else {}
 
-        sup, sup_stale, sup_error = await self._read_with_fallback(
-            name="super.cgi",
-            reader=self.api.read_super,
-            previous_raw=previous.get("super_raw"),
-            required=True,
+        (
+            (sup, sup_stale, sup_error),
+            (acc, acc_stale, acc_error),
+            (reg, reg_stale, reg_error),
+        ) = await asyncio.gather(
+            self._read_endpoint(
+                name="super.cgi",
+                reader=self.api.read_super,
+                previous_raw=previous.get("super_raw"),
+                required=True,
+            ),
+            self._read_endpoint(
+                name="accueil.cgi",
+                reader=self.api.read_accueil,
+                previous_raw=previous.get("accueil_raw"),
+            ),
+            self._read_endpoint(
+                name="getReg.cgi",
+                reader=self.api.read_reg,
+                previous_raw=previous.get("reg_raw"),
+            ),
         )
-        await asyncio.sleep(INTER_REQUEST_DELAY)
-        acc, acc_stale, acc_error = await self._read_with_fallback(
-            name="accueil.cgi",
-            reader=self.api.read_accueil,
-            previous_raw=previous.get("accueil_raw"),
-        )
-        await asyncio.sleep(INTER_REQUEST_DELAY)
-        reg, reg_stale, reg_error = await self._read_with_fallback(
-            name="getReg.cgi",
-            reader=self.api.read_reg,
-            previous_raw=previous.get("reg_raw"),
-        )
-        self.logger.debug("super_raw: %s", sup)
-        self.logger.debug("accueil_raw: %s", acc)
-        self.logger.debug("reg_raw: %s", reg)
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug("super_raw: %s", sup)
+            self.logger.debug("accueil_raw: %s", acc)
+            self.logger.debug("reg_raw: %s", reg)
         page_metadata: dict[str, Any] = {}
         for raw in (sup, acc, reg):
             if not page_metadata:
@@ -751,7 +784,6 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
         parsed_super = parse_super_values(sup)
         parsed_accueil = parse_accueil_html(acc)
         return {
-            **previous,
             "super_raw": sup,
             "accueil_raw": acc,
             "reg_raw": reg,

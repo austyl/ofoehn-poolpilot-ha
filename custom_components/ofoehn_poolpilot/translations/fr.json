@@ -38,6 +38,7 @@
         "title": "Options avancées",
         "data": {
           "scan_interval": "Intervalle de rafraîchissement (secondes)",
+          "enable_raw_sensors": "Activer les capteurs Raw (debug)",
           "water_in_idx": "Index DONNEE# Eau In",
           "water_out_idx": "Index DONNEE# Eau Out",
           "air_idx": "Index DONNEE# Air",
