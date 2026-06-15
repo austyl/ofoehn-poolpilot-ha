@@ -4,6 +4,7 @@ import asyncio
 import html
 import logging
 import re
+import time
 from datetime import timedelta
 from typing import Any, Callable, Optional
 from urllib.parse import urlencode
@@ -64,9 +65,10 @@ TEMP_PAIR_RE = re.compile(
     re.IGNORECASE,
 )
 
-READ_RETRIES = 1
+READ_RETRIES = 0
 READ_RETRY_DELAY = 0.75
 INTER_REQUEST_DELAY = 0.15
+POLL_ERROR_LOG_COOLDOWN = 300  # seconds between repeated poll-failure warnings
 RETRYABLE_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 AUTH_ERROR_STATUSES = {401, 403}
 
@@ -709,7 +711,7 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
         self.options = options or {}
         self._cached_indices: dict[str, int] | None = None
         self._cached_indices_options: dict[str, Any] | None = None
-        self._stale_warned: set[str] = set()
+        self._last_poll_error_log: float = 0.0
 
     def set_options(self, options: dict[str, Any]) -> None:
         """Apply new config entry options and invalidate cached indices."""
@@ -744,41 +746,42 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
         required: bool = False,
     ) -> tuple[str, bool, str | None]:
         try:
-            result = await reader()
-            self._stale_warned.discard(name)
-            return result, False, None
+            return await reader(), False, None
         except Exception as err:
             if previous_raw:
-                if name not in self._stale_warned:
-                    self.logger.warning(
-                        "Read %s failed, reusing the last valid payload: %s",
-                        name,
-                        err,
-                    )
-                    self._stale_warned.add(name)
-                else:
-                    self.logger.debug(
-                        "Read %s still failing, reusing cached payload: %s",
-                        name,
-                        err,
-                    )
+                self.logger.debug(
+                    "Read %s failed, reusing cached payload: %s",
+                    name,
+                    err,
+                )
                 return previous_raw, True, str(err)
             if required:
                 raise UpdateFailed(f"Unable to refresh {name}: {err}") from err
-            if name not in self._stale_warned:
-                self.logger.warning(
-                    "Read %s failed with no cached payload available: %s",
-                    name,
-                    err,
-                )
-                self._stale_warned.add(name)
-            else:
-                self.logger.debug(
-                    "Read %s still failing with no cached payload: %s",
-                    name,
-                    err,
-                )
+            self.logger.debug(
+                "Read %s failed with no cached payload available: %s",
+                name,
+                err,
+            )
             return "", True, str(err)
+
+    def _log_poll_errors(self, errors: dict[str, str | None]) -> None:
+        """Emit at most one throttled warning per persistent poll outage."""
+        active = {name: msg for name, msg in errors.items() if msg}
+        if not active:
+            self._last_poll_error_log = 0.0
+            return
+
+        now = time.monotonic()
+        if now - self._last_poll_error_log < POLL_ERROR_LOG_COOLDOWN:
+            self.logger.debug("Poll still incomplete: %s", active)
+            return
+
+        self._last_poll_error_log = now
+        summary = "; ".join(f"{name} ({msg})" for name, msg in active.items())
+        self.logger.warning(
+            "PAC poll incomplete — using cached data where available: %s",
+            summary,
+        )
 
     async def _read_endpoint(
         self,
@@ -822,6 +825,13 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
             self.logger.debug("super_raw: %s", sup)
             self.logger.debug("accueil_raw: %s", acc)
             self.logger.debug("reg_raw: %s", reg)
+        self._log_poll_errors(
+            {
+                "super.cgi": sup_error,
+                "accueil.cgi": acc_error,
+                "getReg.cgi": reg_error,
+            }
+        )
         page_metadata: dict[str, Any] = {}
         for raw in (sup, acc, reg):
             if not page_metadata:
