@@ -9,16 +9,17 @@
 # O'Foehn PoolPilot – Home Assistant (HACS)
 
 Pilotage **local** de la PAC piscine **O'Foehn** via CGI *PoolPilot* (accueil.cgi, super.cgi, getReg.cgi, setReg.cgi, changeOnOff.cgi, toggleE.cgi).  
-Version **v0.2.3** — suppression de l'auto-détection réseau, validation réelle de la connexion pendant la configuration et meilleure prise en charge des mises à jour d'IP.
+Version **v0.2.4** — config flow corrigé (IP conservée, timeout court), logs allégés, capteurs Raw optionnels, identité appareil stable et polling configurable.
 
 ## ✨ Fonctionnalités
 - Entité **Climate** (OFF/AUTO/CHAUD/FROID, consigne pas de 0,5 °C)
 - Capteurs : **Eau In / Eau Out / Air**
 - Capteurs diagnostiques avancés : états, module, firmware, numéro de série, MAC, options, températures, pressions et relais
-- Capteurs *Raw* : **Super / Accueil / Reg** (valeur affichée limitée à 255 caractères, réponse complète dans les attributs `raw`, `plain_text` et `lines`)
+- Capteurs *Raw* optionnels (debug) : **Super / Accueil / Reg** — désactivés par défaut
 - Switchs : **PAC – Alimentation** & **Éclairage**
-- **Config Flow** (IP/Port + Auth) avec validation de connexion avant création/mise à jour
-- Gestion plus robuste des micro-coupures réseau grâce aux retries et au dernier état valide conservé
+- **Config Flow** (IP/Port + Auth) avec validation rapide (5 s) et écran **Reconfigurer**
+- Intervalle de polling configurable (10–300 s) via Options
+- Gestion des micro-coupures : cache du dernier état valide, 1 seul warning toutes les 5 min
 
 ## 🔐 Authentification
 - **NONE** : aucune auth
