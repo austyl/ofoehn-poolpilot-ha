@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from urllib.parse import urlparse
 
-import asyncio
 import voluptuous as vol
 from aiohttp import ClientError, ClientResponseError
 from homeassistant import config_entries
@@ -17,6 +17,8 @@ from .coordinator import OFoehnApi, parse_accueil_html, parse_donnees
 from .const import (
     CONF_ENABLE_RAW_SENSORS,
     CONF_SCAN_INTERVAL,
+    CONFIG_FLOW_TIMEOUT,
+    CONFIG_FLOW_VALIDATION_MAX,
     DOMAIN,
     DEFAULT_PORT,
     DEFAULT_TIMEOUT,
@@ -49,8 +51,22 @@ class MissingAuth(HomeAssistantError):
     """Error to indicate credentials are required."""
 
 
+class ConnectionTimeout(HomeAssistantError):
+    """Error to indicate the device did not respond in time."""
+
+
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
+
+    @staticmethod
+    def _validation_timeout(user_timeout: int) -> int:
+        return min(max(int(user_timeout), 3), CONFIG_FLOW_TIMEOUT)
+
+    async def _async_probe_device(self, api: OFoehnApi) -> tuple[str, str]:
+        await api.prepare_for_reads()
+        raw_super = await api.read_super(retries=0)
+        raw_accueil = await api.read_accueil(retries=0)
+        return raw_super, raw_accueil
 
     def _normalize_host(self, value: str) -> tuple[str, int | None]:
         raw = value.strip()
@@ -104,6 +120,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def _async_validate_input(self, user_input: dict[str, Any]) -> dict[str, Any]:
         data = self._prepare_user_input(user_input)
         session = async_get_clientsession(self.hass)
+        probe_timeout = self._validation_timeout(data.get("timeout", DEFAULT_TIMEOUT))
         api = OFoehnApi(
             host=data[CONF_HOST],
             port=data.get(CONF_PORT, DEFAULT_PORT),
@@ -115,14 +132,16 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             login_method=data.get("login_method", "POST"),
             user_field=data.get("user_field", "user"),
             pass_field=data.get("pass_field", "pass"),
-            timeout=data.get("timeout", DEFAULT_TIMEOUT),
+            timeout=probe_timeout,
         )
 
         try:
-            raw_super, raw_accueil = await asyncio.gather(
-                api.read_super(),
-                api.read_accueil(),
+            raw_super, raw_accueil = await asyncio.wait_for(
+                self._async_probe_device(api),
+                timeout=CONFIG_FLOW_VALIDATION_MAX,
             )
+        except TimeoutError as err:
+            raise ConnectionTimeout from err
         except ClientResponseError as err:
             if err.status in (401, 403):
                 raise InvalidAuth from err
@@ -167,9 +186,20 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_user(self, user_input=None):
-        errors = {}
-        existing_entries = self._async_current_entries()
-        existing_entry = existing_entries[0] if existing_entries else None
+        return await self._async_step_connection(user_input, step_id="user")
+
+    async def async_step_reconfigure(self, user_input=None):
+        return await self._async_step_connection(user_input, step_id="reconfigure")
+
+    async def _async_step_connection(self, user_input=None, *, step_id: str = "user"):
+        errors: dict[str, str] = {}
+        existing_entry = None
+        reconfigure_entry_id = self.context.get("entry_id")
+        if reconfigure_entry_id:
+            existing_entry = self.hass.config_entries.async_get_entry(reconfigure_entry_id)
+        if existing_entry is None:
+            existing_entries = self._async_current_entries()
+            existing_entry = existing_entries[0] if existing_entries else None
 
         if user_input is not None:
             try:
@@ -180,6 +210,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "missing_auth"
             except InvalidHost:
                 errors["base"] = "invalid_host"
+            except ConnectionTimeout:
+                errors["base"] = "timeout"
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except Exception:
@@ -205,11 +237,16 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data=prepared_input,
                 )
 
-        defaults = dict(existing_entry.data) if existing_entry else dict(user_input or {})
+        if user_input is not None:
+            defaults = dict(user_input)
+        elif existing_entry:
+            defaults = dict(existing_entry.data)
+        else:
+            defaults = {}
         if not defaults.get(CONF_HOST):
             defaults[CONF_HOST] = ""
         return self.async_show_form(
-            step_id="user",
+            step_id=step_id,
             data_schema=self._build_user_schema(defaults),
             errors=errors,
         )
@@ -241,12 +278,21 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             login_method=self.config_entry.data.get("login_method", "POST"),
             user_field=self.config_entry.data.get("user_field", "user"),
             pass_field=self.config_entry.data.get("pass_field", "pass"),
-            timeout=self.config_entry.data.get("timeout", DEFAULT_TIMEOUT),
+            timeout=min(
+                self.config_entry.data.get("timeout", DEFAULT_TIMEOUT),
+                CONFIG_FLOW_TIMEOUT,
+            ),
         )
 
         try:
-            raw = await api.read_super()
+            raw = await asyncio.wait_for(
+                api.read_super(retries=0),
+                timeout=CONFIG_FLOW_VALIDATION_MAX,
+            )
             donnees = parse_donnees(raw)
+        except TimeoutError:
+            errors["base"] = "timeout"
+            donnees = {}
         except Exception:
             errors["base"] = "cannot_connect"
             donnees = {}

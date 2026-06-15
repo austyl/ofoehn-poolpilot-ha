@@ -1,6 +1,8 @@
 DOMAIN = "ofoehn_poolpilot"
 DEFAULT_PORT = 80
 DEFAULT_TIMEOUT = 10  # seconds
+CONFIG_FLOW_TIMEOUT = 5  # seconds — shorter timeout during setup/reconfigure
+CONFIG_FLOW_VALIDATION_MAX = 12  # hard cap for the whole config-flow probe
 PLATFORMS = ["climate", "sensor", "switch", "binary_sensor"]
 SCAN_INTERVAL = 30  # seconds
 MIN_SCAN_INTERVAL = 10

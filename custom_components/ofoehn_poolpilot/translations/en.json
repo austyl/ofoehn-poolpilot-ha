@@ -4,7 +4,23 @@
     "step": {
       "user": {
         "title": "Connect to O'Foehn heat pump",
-        "description": "Enter the heat pump's real IP address and choose the authentication mode if required. If a configuration already exists, this form will update it.",
+        "description": "Enter the heat pump's real IP address (e.g. 192.168.2.151) and choose authentication if required. Connection is tested with a short timeout (5 s max).",
+        "data": {
+          "host": "IP address",
+          "port": "Port",
+          "auth_mode": "Authentication mode",
+          "username": "Username",
+          "password": "Password",
+          "login_path": "Login path (COOKIE)",
+          "login_method": "Login method (COOKIE)",
+          "user_field": "Username field name",
+          "pass_field": "Password field name",
+          "timeout": "Timeout (seconds)"
+        }
+      },
+      "reconfigure": {
+        "title": "Update O'Foehn connection",
+        "description": "Fix the IP address or authentication. Connection is tested with a short timeout (5 s max).",
         "data": {
           "host": "IP address",
           "port": "Port",
@@ -29,6 +45,7 @@
       "invalid_auth": "Authentication was rejected by the heat pump.",
       "invalid_host": "Invalid IP address or hostname.",
       "missing_auth": "Username and password are required for this mode.",
+      "timeout": "The heat pump did not respond in time. Check the IP address and network.",
       "unknown": "Unexpected error."
     }
   },

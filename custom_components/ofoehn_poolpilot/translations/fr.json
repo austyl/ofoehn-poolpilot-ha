@@ -4,7 +4,23 @@
     "step": {
       "user": {
         "title": "Connexion à la PAC O'Foehn",
-        "description": "Entrez l'adresse IP réelle de la PAC et choisissez le mode d'authentification si nécessaire. Si une configuration existe déjà, ce formulaire la mettra à jour.",
+        "description": "Entrez l'adresse IP réelle de la PAC (ex. 192.168.2.151) et choisissez le mode d'authentification si nécessaire. La connexion est testée avec un délai court (5 s max).",
+        "data": {
+          "host": "Adresse IP",
+          "port": "Port",
+          "auth_mode": "Mode d'authentification",
+          "username": "Nom d'utilisateur",
+          "password": "Mot de passe",
+          "login_path": "Chemin de login (COOKIE)",
+          "login_method": "Méthode de login (COOKIE)",
+          "user_field": "Nom du champ utilisateur",
+          "pass_field": "Nom du champ mot de passe",
+          "timeout": "Délai d'expiration (secondes)"
+        }
+      },
+      "reconfigure": {
+        "title": "Modifier la connexion O'Foehn",
+        "description": "Corrigez l'adresse IP ou l'authentification. La connexion est testée avec un délai court (5 s max).",
         "data": {
           "host": "Adresse IP",
           "port": "Port",
@@ -29,6 +45,7 @@
       "invalid_auth": "Authentification refusée par la PAC.",
       "invalid_host": "Adresse IP ou nom d'hôte invalide.",
       "missing_auth": "Nom d'utilisateur et mot de passe requis pour ce mode.",
+      "timeout": "La PAC ne répond pas (délai dépassé). Vérifiez l'adresse IP et le réseau.",
       "unknown": "Erreur inattendue."
     }
   },

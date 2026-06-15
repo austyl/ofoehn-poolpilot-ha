@@ -64,9 +64,11 @@ TEMP_PAIR_RE = re.compile(
     re.IGNORECASE,
 )
 
-READ_RETRIES = 2
+READ_RETRIES = 1
 READ_RETRY_DELAY = 0.75
+INTER_REQUEST_DELAY = 0.15
 RETRYABLE_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504}
+AUTH_ERROR_STATUSES = {401, 403}
 
 
 def clean_html_text(raw: str | None) -> str:
@@ -323,6 +325,13 @@ class OFoehnApi:
         self._basic_auth = BasicAuth(username, password) if (auth_mode == AUTH_BASIC and username) else None
         self._timeout = timeout
         self._cookie_logged_in = False
+        self._request_lock = asyncio.Lock()
+        self._login_lock = asyncio.Lock()
+
+    async def prepare_for_reads(self) -> None:
+        """Ensure auth is ready before a polling batch."""
+        if self._auth_mode == AUTH_COOKIE:
+            await self._maybe_login()
 
     def _url(self, path: str, query: dict[str, Any] | None = None) -> str:
         url = self._base + path
@@ -340,21 +349,22 @@ class OFoehnApi:
     async def _maybe_login(self, *, force: bool = False) -> None:
         if self._auth_mode != AUTH_COOKIE:
             return
-        if self._cookie_logged_in and not force:
-            return
-        data = {self._user_field: self._username or "", self._pass_field: self._password or ""}
-        url = self._base + self._login_path
-        try:
-            if self._login_method == "GET":
-                async with self._session.get(url, params=data, timeout=self._timeout) as resp:
-                    resp.raise_for_status()
-            else:
-                async with self._session.post(url, data=data, timeout=self._timeout) as resp:
-                    resp.raise_for_status()
-        except Exception:
-            self._cookie_logged_in = False
-            raise
-        self._cookie_logged_in = True
+        async with self._login_lock:
+            if self._cookie_logged_in and not force:
+                return
+            data = {self._user_field: self._username or "", self._pass_field: self._password or ""}
+            url = self._base + self._login_path
+            try:
+                if self._login_method == "GET":
+                    async with self._session.get(url, params=data, timeout=self._timeout) as resp:
+                        resp.raise_for_status()
+                else:
+                    async with self._session.post(url, data=data, timeout=self._timeout) as resp:
+                        resp.raise_for_status()
+            except Exception:
+                self._cookie_logged_in = False
+                raise
+            self._cookie_logged_in = True
 
     async def _fetch(
         self,
@@ -365,82 +375,101 @@ class OFoehnApi:
         query: dict[str, Any] | None = None,
         retries: int = 0,
     ) -> str:
-        url = self._url(path, query=query)
-        auth_retry_done = False
-        attempt = 0
+        async with self._request_lock:
+            url = self._url(path, query=query)
+            auth_retry_done = False
+            attempt = 0
 
-        while attempt <= retries:
-            try:
-                if method == "GET":
-                    async with self._session.get(url, timeout=self._timeout, auth=self._basic_auth) as resp:
+            while attempt <= retries:
+                try:
+                    if method == "GET":
+                        async with self._session.get(url, timeout=self._timeout, auth=self._basic_auth) as resp:
+                            resp.raise_for_status()
+                            return await resp.text()
+
+                    payload = data
+                    if self._auth_mode == AUTH_QUERY and self._username and self._password:
+                        if isinstance(payload, dict) or payload is None:
+                            payload = payload.copy() if payload else {}
+                            payload[self._user_field] = self._username
+                            payload[self._pass_field] = self._password
+                    async with self._session.post(
+                        url,
+                        data=payload or {},
+                        timeout=self._timeout,
+                        auth=self._basic_auth,
+                    ) as resp:
                         resp.raise_for_status()
                         return await resp.text()
+                except ClientResponseError as err:
+                    if (
+                        err.status in AUTH_ERROR_STATUSES
+                        and self._auth_mode == AUTH_COOKIE
+                        and not auth_retry_done
+                    ):
+                        self._cookie_logged_in = False
+                        await self._maybe_login(force=True)
+                        auth_retry_done = True
+                        continue
+                    if err.status in AUTH_ERROR_STATUSES:
+                        raise
+                    if method != "GET" or attempt >= retries or err.status not in RETRYABLE_HTTP_STATUSES:
+                        raise
+                    attempt += 1
+                    delay = READ_RETRY_DELAY * attempt
+                    _LOGGER.debug(
+                        "Read %s failed with HTTP %s, retrying in %.2fs (%s/%s)",
+                        path,
+                        err.status,
+                        delay,
+                        attempt,
+                        retries,
+                    )
+                    await asyncio.sleep(delay)
+                except (ClientError, asyncio.TimeoutError, OSError) as err:
+                    if method != "GET" or attempt >= retries:
+                        raise
+                    attempt += 1
+                    delay = READ_RETRY_DELAY * attempt
+                    _LOGGER.debug(
+                        "Read %s failed (%s), retrying in %.2fs (%s/%s)",
+                        path,
+                        err,
+                        delay,
+                        attempt,
+                        retries,
+                    )
+                    await asyncio.sleep(delay)
 
-                payload = data
-                if self._auth_mode == AUTH_QUERY and self._username and self._password:
-                    if isinstance(payload, dict) or payload is None:
-                        payload = payload.copy() if payload else {}
-                        payload[self._user_field] = self._username
-                        payload[self._pass_field] = self._password
-                async with self._session.post(
-                    url,
-                    data=payload or {},
-                    timeout=self._timeout,
-                    auth=self._basic_auth,
-                ) as resp:
-                    resp.raise_for_status()
-                    return await resp.text()
-            except ClientResponseError as err:
-                if err.status in (401, 403) and self._auth_mode == AUTH_COOKIE and not auth_retry_done:
-                    self._cookie_logged_in = False
-                    await self._maybe_login(force=True)
-                    auth_retry_done = True
-                    continue
-                if method != "GET" or attempt >= retries or err.status not in RETRYABLE_HTTP_STATUSES:
-                    raise
-                attempt += 1
-                delay = READ_RETRY_DELAY * attempt
-                _LOGGER.warning(
-                    "Read %s failed with HTTP %s, retrying in %.2fs (%s/%s)",
-                    path,
-                    err.status,
-                    delay,
-                    attempt,
-                    retries,
-                )
-                await asyncio.sleep(delay)
-            except (ClientError, asyncio.TimeoutError, OSError) as err:
-                if method != "GET" or attempt >= retries:
-                    raise
-                attempt += 1
-                delay = READ_RETRY_DELAY * attempt
-                _LOGGER.warning(
-                    "Read %s failed (%s), retrying in %.2fs (%s/%s)",
-                    path,
-                    err,
-                    delay,
-                    attempt,
-                    retries,
-                )
-                await asyncio.sleep(delay)
-
-        raise UpdateFailed(f"Unable to read {path}")
+            raise UpdateFailed(f"Unable to read {path}")
 
     # Reads
-    async def read_super(self) -> str:
+    async def read_super(self, *, retries: int | None = None) -> str:
         if self._auth_mode == AUTH_COOKIE:
             await self._maybe_login()
-        return await self._fetch("GET", ENDPOINTS["super"], retries=READ_RETRIES)
+        return await self._fetch(
+            "GET",
+            ENDPOINTS["super"],
+            retries=READ_RETRIES if retries is None else retries,
+        )
 
-    async def read_accueil(self) -> str:
+    async def read_accueil(self, *, retries: int | None = None) -> str:
         if self._auth_mode == AUTH_COOKIE:
             await self._maybe_login()
-        return await self._fetch("GET", ENDPOINTS["accueil"], retries=READ_RETRIES)
+        return await self._fetch(
+            "GET",
+            ENDPOINTS["accueil"],
+            retries=READ_RETRIES if retries is None else retries,
+        )
 
-    async def read_reg(self) -> str:
+    async def read_reg(self, *, retries: int | None = None) -> str:
         if self._auth_mode == AUTH_COOKIE:
             await self._maybe_login()
-        return await self._fetch("GET", ENDPOINTS["reg_get"], retries=READ_RETRIES)
+        return await self._fetch(
+            "GET",
+            ENDPOINTS["reg_get"],
+            retries=READ_RETRIES if retries is None else retries,
+        )
 
     # Writes
     async def set_mode(self, mode: str) -> None:
@@ -461,9 +490,8 @@ class OFoehnApi:
     async def check_connection(self) -> bool:
         """Perform a lightweight request to verify connectivity."""
         try:
-            if self._auth_mode == AUTH_COOKIE:
-                await self._maybe_login()
-            await self._fetch("GET", ENDPOINTS["accueil"], retries=0)
+            await self.prepare_for_reads()
+            await self._fetch("GET", ENDPOINTS["super"], retries=0)
             return True
         except Exception:
             return False
@@ -681,6 +709,7 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
         self.options = options or {}
         self._cached_indices: dict[str, int] | None = None
         self._cached_indices_options: dict[str, Any] | None = None
+        self._stale_warned: set[str] = set()
 
     def set_options(self, options: dict[str, Any]) -> None:
         """Apply new config entry options and invalidate cached indices."""
@@ -715,22 +744,40 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
         required: bool = False,
     ) -> tuple[str, bool, str | None]:
         try:
-            return await reader(), False, None
+            result = await reader()
+            self._stale_warned.discard(name)
+            return result, False, None
         except Exception as err:
             if previous_raw:
-                self.logger.warning(
-                    "Read %s failed, reusing the last valid payload: %s",
-                    name,
-                    err,
-                )
+                if name not in self._stale_warned:
+                    self.logger.warning(
+                        "Read %s failed, reusing the last valid payload: %s",
+                        name,
+                        err,
+                    )
+                    self._stale_warned.add(name)
+                else:
+                    self.logger.debug(
+                        "Read %s still failing, reusing cached payload: %s",
+                        name,
+                        err,
+                    )
                 return previous_raw, True, str(err)
             if required:
                 raise UpdateFailed(f"Unable to refresh {name}: {err}") from err
-            self.logger.warning(
-                "Read %s failed with no cached payload available: %s",
-                name,
-                err,
-            )
+            if name not in self._stale_warned:
+                self.logger.warning(
+                    "Read %s failed with no cached payload available: %s",
+                    name,
+                    err,
+                )
+                self._stale_warned.add(name)
+            else:
+                self.logger.debug(
+                    "Read %s still failing with no cached payload: %s",
+                    name,
+                    err,
+                )
             return "", True, str(err)
 
     async def _read_endpoint(
@@ -751,27 +798,25 @@ class OFoehnCoordinator(DataUpdateCoordinator[dict]):
     async def _async_update_data(self) -> dict:
         previous = self.data if isinstance(self.data, dict) else {}
 
-        (
-            (sup, sup_stale, sup_error),
-            (acc, acc_stale, acc_error),
-            (reg, reg_stale, reg_error),
-        ) = await asyncio.gather(
-            self._read_endpoint(
-                name="super.cgi",
-                reader=self.api.read_super,
-                previous_raw=previous.get("super_raw"),
-                required=True,
-            ),
-            self._read_endpoint(
-                name="accueil.cgi",
-                reader=self.api.read_accueil,
-                previous_raw=previous.get("accueil_raw"),
-            ),
-            self._read_endpoint(
-                name="getReg.cgi",
-                reader=self.api.read_reg,
-                previous_raw=previous.get("reg_raw"),
-            ),
+        await self.api.prepare_for_reads()
+
+        sup, sup_stale, sup_error = await self._read_endpoint(
+            name="super.cgi",
+            reader=self.api.read_super,
+            previous_raw=previous.get("super_raw"),
+            required=True,
+        )
+        await asyncio.sleep(INTER_REQUEST_DELAY)
+        acc, acc_stale, acc_error = await self._read_endpoint(
+            name="accueil.cgi",
+            reader=self.api.read_accueil,
+            previous_raw=previous.get("accueil_raw"),
+        )
+        await asyncio.sleep(INTER_REQUEST_DELAY)
+        reg, reg_stale, reg_error = await self._read_endpoint(
+            name="getReg.cgi",
+            reader=self.api.read_reg,
+            previous_raw=previous.get("reg_raw"),
         )
         if self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug("super_raw: %s", sup)
