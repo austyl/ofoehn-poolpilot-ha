@@ -3,11 +3,10 @@ from __future__ import annotations
 from homeassistant.components.climate import ClimateEntity
 from homeassistant.components.climate.const import HVACMode, ClimateEntityFeature
 from homeassistant.const import UnitOfTemperature
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import OFoehnCoordinator
-from .helpers import device_info_for_host
+from .helpers import OFoehnEntity, get_donnee_bool, get_donnee_float
 
 SUPPORTED_HVAC = [HVACMode.OFF, HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO]
 
@@ -15,11 +14,12 @@ SUPPORTED_HVAC = [HVACMode.OFF, HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO]
 async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data[DOMAIN][entry.entry_id]
     coord: OFoehnCoordinator = data["coordinator"]
-    host = data["host"]
-    async_add_entities([OFoehnClimate(coord, host, entry.entry_id)], True)
+    device_key = data["device_key"]
+    device_info = data["device_info"]
+    async_add_entities([OFoehnClimate(coord, device_key, device_info)], True)
 
 
-class OFoehnClimate(CoordinatorEntity, ClimateEntity):
+class OFoehnClimate(OFoehnEntity, ClimateEntity):
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = SUPPORTED_HVAC
@@ -27,30 +27,24 @@ class OFoehnClimate(CoordinatorEntity, ClimateEntity):
     _attr_min_temp = 10
     _attr_max_temp = 35
 
-    def __init__(self, coordinator: OFoehnCoordinator, host: str, entry_id: str):
-        super().__init__(coordinator)
-        self._host = host
-        self._entry_id = entry_id
+    def __init__(
+        self,
+        coordinator: OFoehnCoordinator,
+        device_key: str,
+        device_info: dict,
+    ):
+        super().__init__(coordinator, device_key, device_info)
         self._attr_name = "O'Foehn – PAC Piscine"
-        self._attr_unique_id = f"ofoehn_climate_{host}"
+        self._attr_unique_id = f"ofoehn_climate_{device_key}"
 
-    @property
-    def device_info(self):
-        return device_info_for_host(self._host)
-
-    def _is_power_on(self):
-        idx = self.coordinator.data["indices"].get("power_idx")
-        if idx is None:
-            fallback = self.coordinator.data.get("power_on")
-            return True if fallback is None else fallback
-        try:
-            value = self.coordinator.data["super"].get(idx)
-            if value is not None:
-                return float(value) > 0
-        except Exception:
-            pass
-        fallback = self.coordinator.data.get("power_on")
-        return True if fallback is None else fallback
+    def _is_power_on(self) -> bool:
+        result = get_donnee_bool(
+            self.coordinator.data,
+            "power_idx",
+            fallback_key="power_on",
+            default=True,
+        )
+        return bool(result)
 
     async def _power_on(self):
         if not self._is_power_on():
@@ -64,11 +58,11 @@ class OFoehnClimate(CoordinatorEntity, ClimateEntity):
 
     @property
     def current_temperature(self):
-        idx = self.coordinator.data["indices"]["water_in_idx"]
-        value = self.coordinator.data["super"].get(idx)
-        if value is not None:
-            return value
-        return self.coordinator.data.get("water_in")
+        return get_donnee_float(
+            self.coordinator.data,
+            "water_in_idx",
+            fallback_key="water_in",
+        )
 
     @property
     def target_temperature(self):

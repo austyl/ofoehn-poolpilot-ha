@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlparse
 
+import asyncio
 import voluptuous as vol
 from aiohttp import ClientError, ClientResponseError
 from homeassistant import config_entries
@@ -14,6 +15,8 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .coordinator import OFoehnApi, parse_accueil_html, parse_donnees
 
 from .const import (
+    CONF_ENABLE_RAW_SENSORS,
+    CONF_SCAN_INTERVAL,
     DOMAIN,
     DEFAULT_PORT,
     DEFAULT_TIMEOUT,
@@ -22,6 +25,9 @@ from .const import (
     AUTH_QUERY,
     AUTH_COOKIE,
     DEFAULT_INDEX,
+    MAX_SCAN_INTERVAL,
+    MIN_SCAN_INTERVAL,
+    SCAN_INTERVAL,
 )
 
 AUTH_OPTIONS = [AUTH_NONE, AUTH_BASIC, AUTH_QUERY, AUTH_COOKIE]
@@ -113,8 +119,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
         try:
-            raw_super = await api.read_super()
-            raw_accueil = await api.read_accueil()
+            raw_super, raw_accueil = await asyncio.gather(
+                api.read_super(),
+                api.read_accueil(),
+            )
         except ClientResponseError as err:
             if err.status in (401, 403):
                 raise InvalidAuth from err
@@ -257,6 +265,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             schema = vol.Schema(
                 {
                     vol.Optional(
+                        CONF_SCAN_INTERVAL,
+                        default=oi.get(CONF_SCAN_INTERVAL, SCAN_INTERVAL),
+                    ): vol.All(int, vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL)),
+                    vol.Optional(
+                        CONF_ENABLE_RAW_SENSORS,
+                        default=oi.get(CONF_ENABLE_RAW_SENSORS, False),
+                    ): bool,
+                    vol.Optional(
                         "water_in_idx",
                         default=oi.get("water_in_idx", DEFAULT_INDEX["water_in_idx"]),
                         description=select,
@@ -306,6 +322,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         else:
             schema = vol.Schema(
                 {
+                    vol.Optional(
+                        CONF_SCAN_INTERVAL,
+                        default=oi.get(CONF_SCAN_INTERVAL, SCAN_INTERVAL),
+                    ): vol.All(int, vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL)),
+                    vol.Optional(
+                        CONF_ENABLE_RAW_SENSORS,
+                        default=oi.get(CONF_ENABLE_RAW_SENSORS, False),
+                    ): bool,
                     vol.Optional(
                         "water_in_idx",
                         default=oi.get("water_in_idx", DEFAULT_INDEX["water_in_idx"]),

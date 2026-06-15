@@ -38,6 +38,7 @@
         "title": "Advanced options",
         "data": {
           "scan_interval": "Refresh interval (seconds)",
+          "enable_raw_sensors": "Enable Raw sensors (debug)",
           "water_in_idx": "DONNEE# index: Water In",
           "water_out_idx": "DONNEE# index: Water Out",
           "air_idx": "DONNEE# index: Air",
